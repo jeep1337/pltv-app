@@ -21,6 +21,7 @@ def preprocess_data(df):
     # Extract features from the event_data JSON
     df['event_name'] = df['event_data'].apply(lambda x: x.get('event_name'))
     df['value'] = df['event_data'].apply(lambda x: x.get('value', 0))
+    df['event_timestamp'] = df['event_data'].apply(lambda x: pd.to_datetime(x.get('timestamp')))
 
     # Calculate features for each customer
     purchases = df[df['event_name'] == 'purchase']
@@ -28,7 +29,8 @@ def preprocess_data(df):
 
     purchase_features = purchases.groupby('customer_id').agg(
         total_purchase_value=('value', 'sum'),
-        number_of_purchases=('event_name', 'count')
+        number_of_purchases=('event_name', 'count'),
+        last_purchase_date=('event_timestamp', 'max')
     ).reset_index()
 
     page_view_features = page_views.groupby('customer_id').agg(
@@ -39,6 +41,13 @@ def preprocess_data(df):
     all_customers = pd.DataFrame(df['customer_id'].unique(), columns=['customer_id'])
     customer_features = pd.merge(all_customers, purchase_features, on='customer_id', how='left')
     customer_features = pd.merge(customer_features, page_view_features, on='customer_id', how='left').fillna(0)
+
+    # Calculate days_since_last_purchase
+    current_date = pd.to_datetime('now')
+    customer_features['days_since_last_purchase'] = (current_date - customer_features['last_purchase_date']).dt.days.fillna(0)
+
+    # Drop the intermediate last_purchase_date column
+    customer_features = customer_features.drop(columns=['last_purchase_date'])
 
     # For now, we'll also create a dummy 'pltv' column for demonstration purposes.
     # In a real-world scenario, you would calculate this based on historical data.
@@ -51,7 +60,7 @@ def preprocess_data(df):
 
 def train_model(df):
     """Trains a simple linear regression model."""
-    X = df[['total_purchase_value', 'number_of_purchases', 'number_of_page_views']]
+    X = df[['total_purchase_value', 'number_of_purchases', 'number_of_page_views', 'days_since_last_purchase']]
     y = df['pltv']
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
