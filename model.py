@@ -41,7 +41,7 @@ def preprocess_data(df):
 
     # For now, we'll also create a dummy 'pltv' column for demonstration purposes.
     # In a real-world scenario, you would calculate this based on historical data.
-    customer_features['pltv'] = (customer_features['total_purchase_value'] * 2) + (customer_features['number_of_purchases'] * 10) + (customer_features['number_of_page_views'] * 0.5) + (np.random.rand(len(customer_features)) * 10)
+    customer_features['pltv'] = customer_features['total_purchase_value']
 
     print("Customer Features DataFrame:")
     print(customer_features)
