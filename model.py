@@ -31,7 +31,8 @@ def preprocess_data(df):
         total_purchase_value=('value', 'sum'),
         number_of_purchases=('event_name', 'count'),
         last_purchase_date=('event_timestamp', 'max'),
-        first_purchase_date=('event_timestamp', 'min') # Get first purchase date
+        first_purchase_date=('event_timestamp', 'min'), # Get first purchase date
+        average_purchase_value=('value', 'mean') # Calculate average purchase value
     ).reset_index()
 
     page_view_features = page_views.groupby('customer_id').agg(
@@ -75,7 +76,7 @@ def preprocess_data(df):
 
 def train_model(df):
     """Trains a simple linear regression model."""
-    X = df[['total_purchase_value', 'number_of_purchases', 'number_of_page_views', 'days_since_last_purchase', 'purchase_frequency']]
+    X = df[['total_purchase_value', 'number_of_purchases', 'number_of_page_views', 'days_since_last_purchase', 'purchase_frequency', 'average_purchase_value']]
     y = df['pltv']
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)

@@ -63,5 +63,21 @@ def get_all_customer_events():
             conn.close()
     return []
 
+def get_customer_events(customer_id):
+    """Retrieves all event data for a specific customer from the database."""
+    conn = connect_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT customer_id, event_data, created_at FROM customers WHERE customer_id = %s", (customer_id,))
+            events = cur.fetchall()
+            return events
+        except Exception as e:
+            print(f"Error retrieving events for customer {customer_id}: {e}")
+            return []
+        finally:
+            conn.close()
+    return []
+
 if __name__ == "__main__":
     create_customers_table()

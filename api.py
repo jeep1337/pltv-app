@@ -1,7 +1,9 @@
-from flask import Flask, request, jsonify
-from database import connect_db, create_customers_table, get_all_customer_events
 import json
 import joblib
+import pandas as pd
+from flask import Flask, request, jsonify
+from database import connect_db, create_customers_table, get_all_customer_events, get_customer_events
+from model import preprocess_data
 
 app = Flask(__name__)
 
@@ -10,22 +12,49 @@ model = joblib.load('pltv_model.pkl')
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    # Get customer data from the request
-    customer_data = request.get_json()
+    # Get customer_id from the request
+    data = request.get_json()
+    customer_id = data.get('customer_id')
 
-    # Preprocess the input data (this should match the preprocessing in model.py)
-    total_purchase_value = customer_data.get('total_purchase_value', 0)
-    number_of_purchases = customer_data.get('number_of_purchases', 0)
-    number_of_page_views = customer_data.get('number_of_page_views', 0)
-    days_since_last_purchase = customer_data.get('days_since_last_purchase', 0)
-    purchase_frequency = customer_data.get('purchase_frequency', 0.0)
-    prediction_data = [[total_purchase_value, number_of_purchases, number_of_page_views, days_since_last_purchase, purchase_frequency]]
+    if not customer_id:
+        return jsonify({'error': 'customer_id is required'}), 400
+
+    # Retrieve all events for the customer
+    events_raw = get_customer_events(customer_id)
+
+    if not events_raw:
+        return jsonify({'error': f'No events found for customer_id: {customer_id}'}), 404
+
+    # Convert raw events to a DataFrame suitable for preprocess_data
+    # preprocess_data expects a DataFrame with 'customer_id', 'event_data', 'created_at'
+    df = pd.DataFrame(events_raw, columns=['customer_id', 'event_data', 'created_at'])
+
+    # Preprocess the data to generate features
+    # preprocess_data returns a DataFrame with all customer features
+    customer_features_df = preprocess_data(df)
+
+    # Filter for the specific customer's features
+    customer_features = customer_features_df[customer_features_df['customer_id'] == customer_id]
+
+    if customer_features.empty:
+        return jsonify({'error': f'Could not generate features for customer_id: {customer_id}'}), 500
+
+    # Ensure the order of features matches the training data
+    # X = df[['total_purchase_value', 'number_of_purchases', 'number_of_page_views', 'days_since_last_purchase', 'purchase_frequency', 'average_purchase_value']]
+    prediction_data = customer_features[[
+        'total_purchase_value',
+        'number_of_purchases',
+        'number_of_page_views',
+        'days_since_last_purchase',
+        'purchase_frequency',
+        'average_purchase_value'
+    ]].values
 
     # Use the model to predict pLTV
     pltv = model.predict(prediction_data)[0]
 
     # Return the prediction
-    return jsonify({'pltv': pltv})
+    return jsonify({'customer_id': customer_id, 'pltv': pltv})
 
 @app.route('/event', methods=['POST'])
 def event():
