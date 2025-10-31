@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from database import connect_db, create_customers_table
+from database import connect_db, create_customers_table, get_all_customer_events
 import json
 
 app = Flask(__name__)
