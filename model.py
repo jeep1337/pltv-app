@@ -12,25 +12,26 @@ def load_data():
 
 def preprocess_data(df):
     """Preprocesses the data and creates features for the model."""
-    # For now, we'll just count the number of events for each customer
-    # and use that as a feature.
-    df['event_count'] = df.groupby('customer_id')['customer_id'].transform('count')
+    # Extract features from the event_data JSON
+    df['event_name'] = df['event_data'].apply(lambda x: x.get('event_name'))
+    df['value'] = df['event_data'].apply(lambda x: x.get('value', 0))
 
-    # In a real-world scenario, you would do more sophisticated feature
-    # engineering here, such as:
-    # - Recency, Frequency, Monetary (RFM) analysis
-    # - Time-based features (e.g., time since last event)
-    # - Features based on event types (e.g., number of purchases)
+    # Calculate features for each customer
+    customer_features = df.groupby('customer_id').agg(
+        total_purchase_value=('value', lambda x: x[df['event_name'] == 'purchase'].sum()),
+        number_of_purchases=('event_name', lambda x: (x == 'purchase').sum()),
+        number_of_page_views=('event_name', lambda x: (x == 'page_view').sum())
+    ).reset_index()
 
     # For now, we'll also create a dummy 'pltv' column for demonstration purposes.
     # In a real-world scenario, you would calculate this based on historical data.
-    df['pltv'] = df['event_count'] * 10 # Dummy pLTV calculation
+    customer_features['pltv'] = customer_features['total_purchase_value'] * 2 # Dummy pLTV calculation
 
-    return df
+    return customer_features
 
 def train_model(df):
     """Trains a simple linear regression model."""
-    X = df[['event_count']]
+    X = df[['total_purchase_value', 'number_of_purchases', 'number_of_page_views']]
     y = df['pltv']
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)

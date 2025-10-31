@@ -14,9 +14,10 @@ def predict():
     customer_data = request.get_json()
 
     # Preprocess the input data (this should match the preprocessing in model.py)
-    # For now, we'll just use a dummy value for event_count.
-    event_count = customer_data.get('event_count', 1)
-    prediction_data = [[event_count]]
+    total_purchase_value = customer_data.get('total_purchase_value', 0)
+    number_of_purchases = customer_data.get('number_of_purchases', 0)
+    number_of_page_views = customer_data.get('number_of_page_views', 0)
+    prediction_data = [[total_purchase_value, number_of_purchases, number_of_page_views]]
 
     # Use the model to predict pLTV
     pltv = model.predict(prediction_data)[0]
