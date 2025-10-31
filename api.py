@@ -1,18 +1,28 @@
 from flask import Flask, request, jsonify
 from database import connect_db, create_customers_table, get_all_customer_events
 import json
+import joblib
 
 app = Flask(__name__)
+
+# Load the trained model
+model = joblib.load('pltv_model.pkl')
 
 @app.route('/predict', methods=['POST'])
 def predict():
     # Get customer data from the request
     customer_data = request.get_json()
 
-    # TODO: Use the model to predict pLTV
+    # Preprocess the input data (this should match the preprocessing in model.py)
+    # For now, we'll just use a dummy value for event_count.
+    event_count = customer_data.get('event_count', 1)
+    prediction_data = [[event_count]]
+
+    # Use the model to predict pLTV
+    pltv = model.predict(prediction_data)[0]
 
     # Return the prediction
-    return jsonify({'pltv': 123.45})
+    return jsonify({'pltv': pltv})
 
 @app.route('/event', methods=['POST'])
 def event():
