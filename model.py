@@ -21,7 +21,7 @@ def preprocess_data(df):
     # Extract features from the event_data JSON
     df['event_name'] = df['event_data'].apply(lambda x: x.get('event_name'))
     df['value'] = df['event_data'].apply(lambda x: x.get('value', 0))
-    df['event_timestamp'] = df['event_data'].apply(lambda x: pd.to_datetime(x.get('timestamp')))
+    df['event_timestamp'] = df['event_data'].apply(lambda x: pd.to_datetime(x.get('timestamp')).tz_localize(None))
 
     # Calculate features for each customer
     purchases = df[df['event_name'] == 'purchase']
@@ -30,7 +30,7 @@ def preprocess_data(df):
     purchase_features = purchases.groupby('customer_id').agg(
         total_purchase_value=('value', 'sum'),
         number_of_purchases=('event_name', 'count'),
-        last_purchase_date=('event_timestamp', 'max')
+        last_purchase_date=('event_timestamp', lambda x: x.max().tz_localize(None))
     ).reset_index()
 
     page_view_features = page_views.groupby('customer_id').agg(
@@ -40,14 +40,19 @@ def preprocess_data(df):
     # Merge the features into a single DataFrame
     all_customers = pd.DataFrame(df['customer_id'].unique(), columns=['customer_id'])
     customer_features = pd.merge(all_customers, purchase_features, on='customer_id', how='left')
-    customer_features = pd.merge(customer_features, page_view_features, on='customer_id', how='left').fillna(0)
+    customer_features = pd.merge(customer_features, page_view_features, on='customer_id', how='left')
 
     # Calculate days_since_last_purchase
-    current_date = pd.to_datetime('now')
-    customer_features['days_since_last_purchase'] = (current_date - customer_features['last_purchase_date']).dt.days.fillna(0)
+    current_date = pd.to_datetime('now').tz_localize(None)
+    # For customers with no purchases, last_purchase_date will be NaT. Fill with a very old date.
+    customer_features['last_purchase_date'] = customer_features['last_purchase_date'].fillna(pd.to_datetime('1970-01-01').tz_localize(None))
+    customer_features['days_since_last_purchase'] = (current_date - customer_features['last_purchase_date']).dt.days
 
     # Drop the intermediate last_purchase_date column
     customer_features = customer_features.drop(columns=['last_purchase_date'])
+
+    # Fill any remaining NaN values (e.g., for customers with no purchases or page views)
+    customer_features = customer_features.fillna(0)
 
     # For now, we'll also create a dummy 'pltv' column for demonstration purposes.
     # In a real-world scenario, you would calculate this based on historical data.
