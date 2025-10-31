@@ -33,6 +33,20 @@ def create_customers_table():
         finally:
             conn.close()
 
+def clear_customers_table():
+    """Clears the customers table."""
+    conn = connect_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM customers")
+            conn.commit()
+            print("Customers table cleared.")
+        except Exception as e:
+            print(f"Error clearing customers table: {e}")
+        finally:
+            conn.close()
+
 def get_all_customer_events():
     """Retrieves all customer event data from the database."""
     conn = connect_db()

@@ -29,9 +29,10 @@ def predict():
 def event():
     event_data = request.get_json()
     customer_id = event_data.get('customer_id')
+    event_payload = event_data.get('event_data')
 
-    if not customer_id:
-        return jsonify({'error': 'customer_id is required'}), 400
+    if not customer_id or not event_payload:
+        return jsonify({'error': 'customer_id and event_data are required'}), 400
 
     conn = connect_db()
     if conn:
@@ -39,7 +40,7 @@ def event():
             cur = conn.cursor()
             cur.execute(
                 "INSERT INTO customers (customer_id, event_data) VALUES (%s, %s)",
-                (customer_id, json.dumps(event_data))
+                (customer_id, json.dumps(event_payload))
             )
             conn.commit()
             return jsonify({'message': 'Event data stored successfully'}), 200
