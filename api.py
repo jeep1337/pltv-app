@@ -39,6 +39,19 @@ def event():
             conn.close()
     return jsonify({'error': 'Database connection failed'}), 500
 
+@app.route('/events_data', methods=['GET'])
+def events_data():
+    events = get_all_customer_events()
+    # Convert events to a more readable format if necessary
+    formatted_events = []
+    for event in events:
+        formatted_events.append({
+            "customer_id": event[0],
+            "event_data": event[1],
+            "created_at": event[2].isoformat() # Convert datetime to string
+        })
+    return jsonify(formatted_events), 200
+
 if __name__ == '__main__':
     create_customers_table()
     app.run(debug=True)
