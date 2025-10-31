@@ -71,10 +71,34 @@ def event():
             cur = conn.cursor()
             print(f"Received event for customer_id: {customer_id}")
             print(f"Event payload: {event_payload}")
-            cur.execute(
-                "INSERT INTO customers (customer_id, event_data) VALUES (%s, %s)",
-                (customer_id, json.dumps(event_payload))
-            )
+
+            # Check if customer_id already exists
+            cur.execute("SELECT event_data FROM customers WHERE customer_id = %s", (customer_id,))
+            existing_record = cur.fetchone()
+
+            if existing_record:
+                # Customer exists, update event_data by appending new event
+                existing_event_data = existing_record[0] # This is already a Python dict from JSONB
+                if 'events' not in existing_event_data or not isinstance(existing_event_data['events'], list):
+                    existing_event_data['events'] = [] # Initialize if not an array
+
+                # event_payload from request is {'events': [...]}
+                # We need to append the *contents* of event_payload['events']
+                if 'events' in event_payload and isinstance(event_payload['events'], list):
+                    existing_event_data['events'].extend(event_payload['events'])
+
+                cur.execute(
+                    "UPDATE customers SET event_data = %s, created_at = CURRENT_TIMESTAMP WHERE customer_id = %s",
+                    (json.dumps(existing_event_data), customer_id)
+                )
+                print(f"Event data updated for customer_id: {customer_id}")
+            else:
+                # Customer does not exist, insert new record
+                cur.execute(
+                    "INSERT INTO customers (customer_id, event_data) VALUES (%s, %s)",
+                    (customer_id, json.dumps(event_payload))
+                )
+                print(f"New event data inserted for customer_id: {customer_id}")
             conn.commit()
             print("Event data committed to database.")
             return jsonify({'message': 'Event data stored successfully'}), 200
