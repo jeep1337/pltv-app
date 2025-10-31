@@ -18,55 +18,71 @@ def load_data():
 
 def preprocess_data(df):
     """Preprocesses the data and creates features for the model."""
-    # Extract features from the event_data JSON
-    df['event_name'] = df['event_data'].apply(lambda x: x.get('event_name'))
-    df['value'] = df['event_data'].apply(lambda x: x.get('value', 0))
-    df['event_timestamp'] = df['event_data'].apply(lambda x: pd.to_datetime(x.get('timestamp')).tz_localize(None))
+    all_individual_events = []
 
-    # Calculate features for each customer
-    purchases = df[df['event_name'] == 'purchase']
-    page_views = df[df['event_name'] == 'page_view']
+    for index, row in df.iterrows():
+        customer_id = row['customer_id']
+        event_payload = row['event_data']
+
+        if isinstance(event_payload, dict) and 'events' in event_payload and isinstance(event_payload['events'], list):
+            for event in event_payload['events']:
+                event_with_customer_id = event.copy()
+                event_with_customer_id['customer_id'] = customer_id
+                all_individual_events.append(event_with_customer_id)
+
+    if not all_individual_events:
+        return pd.DataFrame(columns=[
+            'customer_id', 'total_purchase_value', 'number_of_purchases',
+            'average_purchase_value', 'last_purchase_date', 'first_purchase_date',
+            'number_of_page_views', 'days_since_last_purchase',
+            'first_event_date', 'time_since_first_event', 'purchase_frequency', 'pltv'
+        ])
+
+    events_df = pd.DataFrame(all_individual_events)
+
+    if 'value' not in events_df.columns:
+        events_df['value'] = 0.0
+    else:
+        events_df['value'] = pd.to_numeric(events_df['value'], errors='coerce').fillna(0.0)
+
+    events_df['event_timestamp'] = pd.to_datetime(events_df['timestamp'], errors='coerce').dt.tz_localize(None)
+    events_df = events_df.dropna(subset=['event_timestamp'])
+
+    purchases = events_df[events_df['event_type'] == 'purchase']
+    page_views = events_df[events_df['event_type'] == 'page_view']
 
     purchase_features = purchases.groupby('customer_id').agg(
         total_purchase_value=('value', 'sum'),
-        number_of_purchases=('event_name', 'count'),
+        number_of_purchases=('event_type', 'count'),
         last_purchase_date=('event_timestamp', 'max'),
-        first_purchase_date=('event_timestamp', 'min'), # Get first purchase date
-        average_purchase_value=('value', 'mean') # Calculate average purchase value
+        first_purchase_date=('event_timestamp', 'min'),
     ).reset_index()
+
+    purchase_features['average_purchase_value'] = purchase_features.apply(
+        lambda row: row['total_purchase_value'] / row['number_of_purchases'] if row['number_of_purchases'] > 0 else 0,
+        axis=1
+    )
 
     page_view_features = page_views.groupby('customer_id').agg(
-        number_of_page_views=('event_name', 'count')
+        number_of_page_views=('event_type', 'count')
     ).reset_index()
 
-    # Merge the features into a single DataFrame
     all_customers = pd.DataFrame(df['customer_id'].unique(), columns=['customer_id'])
     customer_features = pd.merge(all_customers, purchase_features, on='customer_id', how='left')
     customer_features = pd.merge(customer_features, page_view_features, on='customer_id', how='left')
 
-    # Calculate days_since_last_purchase
     current_date = pd.to_datetime('now').tz_localize(None)
-    # For customers with no purchases, last_purchase_date will be NaT. Fill with a very old date.
     customer_features['last_purchase_date'] = customer_features['last_purchase_date'].fillna(pd.to_datetime('1970-01-01').tz_localize(None))
     customer_features['days_since_last_purchase'] = (current_date - customer_features['last_purchase_date']).dt.days
 
-    # Calculate time_since_first_event (customer tenure)
-    customer_features['first_event_date'] = df.groupby('customer_id')['event_timestamp'].min().reset_index(name='first_event_date')['first_event_date']
+    customer_features['first_event_date'] = events_df.groupby('customer_id')['event_timestamp'].min().reset_index(name='first_event_date')['first_event_date']
     customer_features['time_since_first_event'] = (current_date - customer_features['first_event_date']).dt.days.fillna(0)
 
-    # Calculate purchase_frequency
-    # Avoid division by zero for new customers or customers with no events
     customer_features['purchase_frequency'] = customer_features['number_of_purchases'] / customer_features['time_since_first_event']
     customer_features['purchase_frequency'] = customer_features['purchase_frequency'].replace([np.inf, -np.inf], 0).fillna(0)
 
-    # Drop intermediate date columns
-    customer_features = customer_features.drop(columns=['last_purchase_date', 'first_purchase_date'])
-
-    # Fill any remaining NaN values (e.g., for customers with no purchases or page views)
+    customer_features = customer_features.drop(columns=['last_purchase_date', 'first_purchase_date', 'first_event_date'])
     customer_features = customer_features.fillna(0)
-
-    # For now, we'll also create a dummy 'pltv' column for demonstration purposes.
-    # In a real-world scenario, you would calculate this based on historical data.
     customer_features['pltv'] = customer_features['total_purchase_value']
 
     print("Customer Features DataFrame:")
