@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from database import get_all_customer_events, clear_customers_table
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 import joblib
@@ -56,11 +56,28 @@ def train_model(df):
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    model = RandomForestRegressor(random_state=42)
-    model.fit(X_train, y_train)
+    # Define the parameter grid for GridSearchCV
+    param_grid = {
+        'n_estimators': [50, 100, 200],
+        'max_depth': [None, 10, 20],
+        'min_samples_split': [2, 5, 10]
+    }
 
-    # Print the model's coefficients
-    print(f"Model Coefficients: {model.feature_importances_}")
+    # Initialize the RandomForestRegressor
+    rf = RandomForestRegressor(random_state=42)
+
+    # Initialize GridSearchCV
+    grid_search = GridSearchCV(estimator=rf, param_grid=param_grid, cv=3, n_jobs=-1, verbose=2)
+
+    # Fit GridSearchCV to the training data
+    grid_search.fit(X_train, y_train)
+
+    # Get the best model
+    model = grid_search.best_estimator_
+
+    # Print the best hyperparameters and feature importances
+    print(f"Best Hyperparameters: {grid_search.best_params_}")
+    print(f"Model Feature Importances: {model.feature_importances_}")
 
     return model
 
@@ -69,7 +86,7 @@ def save_model(model):
     joblib.dump(model, 'pltv_model.pkl')
 
 if __name__ == '__main__':
-    # clear_customers_table()
+    # clear_customers_table() # Temporarily commented out for data loading
     df = load_data()
     df = preprocess_data(df)
     model = train_model(df)
