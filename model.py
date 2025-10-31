@@ -30,7 +30,8 @@ def preprocess_data(df):
     purchase_features = purchases.groupby('customer_id').agg(
         total_purchase_value=('value', 'sum'),
         number_of_purchases=('event_name', 'count'),
-        last_purchase_date=('event_timestamp', lambda x: x.max().tz_localize(None))
+        last_purchase_date=('event_timestamp', 'max'),
+        first_purchase_date=('event_timestamp', 'min') # Get first purchase date
     ).reset_index()
 
     page_view_features = page_views.groupby('customer_id').agg(
@@ -48,8 +49,17 @@ def preprocess_data(df):
     customer_features['last_purchase_date'] = customer_features['last_purchase_date'].fillna(pd.to_datetime('1970-01-01').tz_localize(None))
     customer_features['days_since_last_purchase'] = (current_date - customer_features['last_purchase_date']).dt.days
 
-    # Drop the intermediate last_purchase_date column
-    customer_features = customer_features.drop(columns=['last_purchase_date'])
+    # Calculate time_since_first_event (customer tenure)
+    customer_features['first_event_date'] = df.groupby('customer_id')['event_timestamp'].min().reset_index(name='first_event_date')['first_event_date']
+    customer_features['time_since_first_event'] = (current_date - customer_features['first_event_date']).dt.days.fillna(0)
+
+    # Calculate purchase_frequency
+    # Avoid division by zero for new customers or customers with no events
+    customer_features['purchase_frequency'] = customer_features['number_of_purchases'] / customer_features['time_since_first_event']
+    customer_features['purchase_frequency'] = customer_features['purchase_frequency'].replace([np.inf, -np.inf], 0).fillna(0)
+
+    # Drop intermediate date columns
+    customer_features = customer_features.drop(columns=['last_purchase_date', 'first_purchase_date'])
 
     # Fill any remaining NaN values (e.g., for customers with no purchases or page views)
     customer_features = customer_features.fillna(0)
@@ -65,7 +75,7 @@ def preprocess_data(df):
 
 def train_model(df):
     """Trains a simple linear regression model."""
-    X = df[['total_purchase_value', 'number_of_purchases', 'number_of_page_views', 'days_since_last_purchase']]
+    X = df[['total_purchase_value', 'number_of_purchases', 'number_of_page_views', 'days_since_last_purchase', 'purchase_frequency']]
     y = df['pltv']
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)

@@ -18,7 +18,8 @@ def predict():
     number_of_purchases = customer_data.get('number_of_purchases', 0)
     number_of_page_views = customer_data.get('number_of_page_views', 0)
     days_since_last_purchase = customer_data.get('days_since_last_purchase', 0)
-    prediction_data = [[total_purchase_value, number_of_purchases, number_of_page_views, days_since_last_purchase]]
+    purchase_frequency = customer_data.get('purchase_frequency', 0.0)
+    prediction_data = [[total_purchase_value, number_of_purchases, number_of_page_views, days_since_last_purchase, purchase_frequency]]
 
     # Use the model to predict pLTV
     pltv = model.predict(prediction_data)[0]
