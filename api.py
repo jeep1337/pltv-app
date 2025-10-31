@@ -38,17 +38,22 @@ def event():
     if conn:
         try:
             cur = conn.cursor()
+            print(f"Received event for customer_id: {customer_id}")
+            print(f"Event payload: {event_payload}")
             cur.execute(
                 "INSERT INTO customers (customer_id, event_data) VALUES (%s, %s)",
                 (customer_id, json.dumps(event_payload))
             )
             conn.commit()
+            print("Event data committed to database.")
             return jsonify({'message': 'Event data stored successfully'}), 200
         except Exception as e:
             print(f"Error storing event data: {e}")
+            conn.rollback() # Rollback in case of error
             return jsonify({'error': str(e)}), 500
         finally:
             conn.close()
+    print("Database connection failed in event() function.")
     return jsonify({'error': 'Database connection failed'}), 500
 
 if __name__ == '__main__':

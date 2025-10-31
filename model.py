@@ -8,6 +8,8 @@ import joblib
 def load_data():
     """Loads event data from the database and returns a pandas DataFrame."""
     events = get_all_customer_events()
+    print("Raw events list from database:")
+    print(events)
     df = pd.DataFrame(events, columns=['customer_id', 'event_data', 'created_at'])
     print("Raw DataFrame from database:")
     print(df)
@@ -66,10 +68,9 @@ def save_model(model):
     joblib.dump(model, 'pltv_model.pkl')
 
 if __name__ == '__main__':
-    clear_customers_table()
-    # Send some new data to the /event endpoint before running this script
-    # df = load_data()
-    # df = preprocess_data(df)
-    # model = train_model(df)
-    # save_model(model)
-    # print("Model trained and saved successfully.")
+    # clear_customers_table()
+    df = load_data()
+    df = preprocess_data(df)
+    model = train_model(df)
+    save_model(model)
+    print("Model trained and saved successfully.")
