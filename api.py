@@ -64,8 +64,15 @@ def predict():
     pltv = model.predict(prediction_data)[0]
     app.logger.info(f'pLTV predicted: {pltv}')
 
-    # Return the prediction
-    return jsonify({'customer_id': customer_id, 'pltv': pltv})
+    # Convert features to a dictionary for the JSON response
+    features_dict = customer_features.to_dict('records')[0]
+
+    # Return the prediction and the features
+    return jsonify({
+        'customer_id': customer_id,
+        'pltv': pltv,
+        'features': features_dict
+    })
 
 @app.route('/event', methods=['POST'])
 def event():
