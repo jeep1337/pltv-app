@@ -59,12 +59,27 @@ def preprocess_data(df):
     events_df['event_timestamp'] = events_df['event_timestamp'].dt.tz_localize(None)
     events_df = events_df.dropna(subset=['event_timestamp'])
 
-    purchases = events_df[events_df['event_name'] == 'purchase']
-    page_views = events_df[events_df['event_name'] == 'page_view']
+    if 'event_name' in events_df.columns:
+        purchases = events_df[events_df['event_name'] == 'purchase']
+        page_views = events_df[events_df['event_name'] == 'page_view']
+        event_name_col = 'event_name'
+    elif 'event_type' in events_df.columns:
+        print("Warning: 'event_name' not found, falling back to 'event_type'.")
+        purchases = events_df[events_df['event_type'] == 'purchase']
+        page_views = events_df[events_df['event_type'] == 'page_view']
+        event_name_col = 'event_type'
+    else:
+        print("Error: Neither 'event_name' nor 'event_type' found in event data.")
+        # Return an empty dataframe with the expected columns to avoid crashing
+        return pd.DataFrame(columns=[
+            'customer_id', 'total_purchase_value', 'number_of_purchases',
+            'average_purchase_value', 'number_of_page_views', 'days_since_last_purchase',
+            'purchase_frequency', 'time_since_first_event', 'pltv'
+        ])
 
     purchase_features = purchases.groupby('customer_id').agg(
         total_purchase_value=('value', 'sum'),
-        number_of_purchases=('event_name', 'count'),
+        number_of_purchases=(event_name_col, 'count'),
         last_purchase_date=('event_timestamp', 'max'),
         first_purchase_date=('event_timestamp', 'min'),
     ).reset_index()
@@ -75,7 +90,7 @@ def preprocess_data(df):
     )
 
     page_view_features = page_views.groupby('customer_id').agg(
-        number_of_page_views=('event_name', 'count')
+        number_of_page_views=(event_name_col, 'count')
     ).reset_index()
 
     all_customers = pd.DataFrame(df['customer_id'].unique(), columns=['customer_id'])
