@@ -12,35 +12,43 @@ model = joblib.load('pltv_model.pkl')
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    app.logger.info('Prediction request received')
     # Get customer_id from the request
     data = request.get_json()
     customer_id = data.get('customer_id')
+    app.logger.info(f'customer_id: {customer_id}')
 
     if not customer_id:
         return jsonify({'error': 'customer_id is required'}), 400
 
     # Retrieve all events for the customer
+    app.logger.info('Retrieving customer events')
     events_raw = get_customer_events(customer_id)
+    app.logger.info(f'events_raw: {events_raw}')
 
     if not events_raw:
         return jsonify({'error': f'No events found for customer_id: {customer_id}'}), 404
 
     # Convert raw events to a DataFrame suitable for preprocess_data
-    # preprocess_data expects a DataFrame with 'customer_id', 'event_data', 'created_at'
+    app.logger.info('Converting to DataFrame')
     df = pd.DataFrame(events_raw, columns=['customer_id', 'event_data', 'created_at'])
+    app.logger.info(f'DataFrame created: {df.head()}')
 
     # Preprocess the data to generate features
-    # preprocess_data returns a DataFrame with all customer features
+    app.logger.info('Preprocessing data')
     customer_features_df = preprocess_data(df)
+    app.logger.info(f'Preprocessing complete: {customer_features_df.head()}')
 
     # Filter for the specific customer's features
+    app.logger.info('Filtering for customer features')
     customer_features = customer_features_df[customer_features_df['customer_id'] == customer_id]
+    app.logger.info(f'Customer features: {customer_features}')
 
     if customer_features.empty:
         return jsonify({'error': f'Could not generate features for customer_id: {customer_id}'}), 500
 
     # Ensure the order of features matches the training data
-    # X = df[['total_purchase_value', 'number_of_purchases', 'number_of_page_views', 'days_since_last_purchase', 'purchase_frequency', 'average_purchase_value']]
+    app.logger.info('Preparing prediction data')
     prediction_data = customer_features[[
         'total_purchase_value',
         'number_of_purchases',
@@ -49,9 +57,12 @@ def predict():
         'purchase_frequency',
         'average_purchase_value'
     ]].values
+    app.logger.info(f'Prediction data: {prediction_data}')
 
     # Use the model to predict pLTV
+    app.logger.info('Predicting pLTV')
     pltv = model.predict(prediction_data)[0]
+    app.logger.info(f'pLTV predicted: {pltv}')
 
     # Return the prediction
     return jsonify({'customer_id': customer_id, 'pltv': pltv})
