@@ -17,6 +17,7 @@ def load_data():
     return df
 
 def preprocess_data(df):
+    print("Executing preprocess_data with event_name fix - v2")
     """Preprocesses the data and creates features for the model."""
     all_individual_events = []
 
