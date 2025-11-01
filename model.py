@@ -45,7 +45,17 @@ def preprocess_data(df):
     else:
         events_df['value'] = pd.to_numeric(events_df['value'], errors='coerce').fillna(0.0)
 
-    events_df['event_timestamp'] = pd.to_datetime(events_df['request_start_time_ms'], unit='ms', errors='coerce').dt.tz_localize(None)
+    if 'timestamp_micros' in events_df.columns:
+        events_df['event_timestamp'] = pd.to_datetime(events_df['timestamp_micros'], unit='us', errors='coerce')
+    elif 'request_start_time_ms' in events_df.columns:
+        events_df['event_timestamp'] = pd.to_datetime(events_df['request_start_time_ms'], unit='ms', errors='coerce')
+    else:
+        # If no timestamp is found, we can't process, so return an empty frame or handle appropriately
+        print("Warning: No timestamp field found in event data. Supported fields are 'timestamp_micros' or 'request_start_time_ms'.")
+        # Create an empty event_timestamp column to avoid crashing later
+        events_df['event_timestamp'] = pd.NaT
+
+    events_df['event_timestamp'] = events_df['event_timestamp'].dt.tz_localize(None)
     events_df = events_df.dropna(subset=['event_timestamp'])
 
     purchases = events_df[events_df['event_type'] == 'purchase']
