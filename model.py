@@ -58,12 +58,12 @@ def preprocess_data(df):
     events_df['event_timestamp'] = events_df['event_timestamp'].dt.tz_localize(None)
     events_df = events_df.dropna(subset=['event_timestamp'])
 
-    purchases = events_df[events_df['event_type'] == 'purchase']
-    page_views = events_df[events_df['event_type'] == 'page_view']
+    purchases = events_df[events_df['event_name'] == 'purchase']
+    page_views = events_df[events_df['event_name'] == 'page_view']
 
     purchase_features = purchases.groupby('customer_id').agg(
         total_purchase_value=('value', 'sum'),
-        number_of_purchases=('event_type', 'count'),
+        number_of_purchases=('event_name', 'count'),
         last_purchase_date=('event_timestamp', 'max'),
         first_purchase_date=('event_timestamp', 'min'),
     ).reset_index()
@@ -74,7 +74,7 @@ def preprocess_data(df):
     )
 
     page_view_features = page_views.groupby('customer_id').agg(
-        number_of_page_views=('event_type', 'count')
+        number_of_page_views=('event_name', 'count')
     ).reset_index()
 
     all_customers = pd.DataFrame(df['customer_id'].unique(), columns=['customer_id'])
