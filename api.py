@@ -59,9 +59,20 @@ def predict():
     ]].values
     app.logger.info(f'Prediction data: {prediction_data}')
 
+    feature_names = [
+        'total_purchase_value',
+        'number_of_purchases',
+        'number_of_page_views',
+        'days_since_last_purchase',
+        'purchase_frequency',
+        'average_purchase_value'
+    ]
+    prediction_data_df = pd.DataFrame(prediction_data, columns=feature_names)
+    app.logger.info(f'Prediction data DataFrame: {prediction_data_df}')
+
     # Use the model to predict pLTV
     app.logger.info('Predicting pLTV')
-    pltv = model.predict(prediction_data)[0]
+    pltv = model.predict(prediction_data_df)[0]
     app.logger.info(f'pLTV predicted: {pltv}')
 
     # Convert features to a dictionary for the JSON response
