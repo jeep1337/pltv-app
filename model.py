@@ -45,7 +45,7 @@ def preprocess_data(df):
     else:
         events_df['value'] = pd.to_numeric(events_df['value'], errors='coerce').fillna(0.0)
 
-    events_df['event_timestamp'] = pd.to_datetime(events_df['timestamp_micros'], unit='us', errors='coerce').dt.tz_localize(None)
+    events_df['event_timestamp'] = pd.to_datetime(events_df['request_start_time_ms'], unit='ms', errors='coerce').dt.tz_localize(None)
     events_df = events_df.dropna(subset=['event_timestamp'])
 
     purchases = events_df[events_df['event_type'] == 'purchase']
