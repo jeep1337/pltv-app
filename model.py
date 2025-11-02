@@ -40,7 +40,6 @@ def preprocess_data(df):
         ])
 
     events_df = pd.DataFrame(all_individual_events)
-    print("--- events_df before timestamp conversion ---\n", events_df.to_string())
 
     if 'value' not in events_df.columns:
         events_df['value'] = 0.0
@@ -58,8 +57,6 @@ def preprocess_data(df):
         print("Warning: No timestamp field found in event data. Supported fields are 'timestamp_micros', 'request_start_time_ms', or 'api_timestamp_micros'.")
         # Create an empty event_timestamp column to avoid crashing later
         events_df['event_timestamp'] = pd.NaT
-
-    print("--- events_df after timestamp conversion ---\n", events_df.to_string())
 
     events_df['event_timestamp'] = events_df['event_timestamp'].dt.tz_localize(None)
     events_df = events_df.dropna(subset=['event_timestamp'])
@@ -115,6 +112,8 @@ def preprocess_data(df):
 
     # Now calculate the time since the first event
     customer_features['time_since_first_event'] = (current_date - customer_features['first_event_date']).dt.days.fillna(0)
+    # Ensure time_since_first_event is at least 1 to avoid division by zero and represent initial activity
+    customer_features['time_since_first_event'] = customer_features['time_since_first_event'].apply(lambda x: max(x, 1))
 
     customer_features['purchase_frequency'] = customer_features['number_of_purchases'] / customer_features['time_since_first_event']
     customer_features['purchase_frequency'] = customer_features['purchase_frequency'].replace([np.inf, -np.inf], 0).fillna(0)
