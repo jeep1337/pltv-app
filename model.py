@@ -50,9 +50,11 @@ def preprocess_data(df):
         events_df['event_timestamp'] = pd.to_datetime(events_df['timestamp_micros'], unit='us', errors='coerce')
     elif 'request_start_time_ms' in events_df.columns:
         events_df['event_timestamp'] = pd.to_datetime(events_df['request_start_time_ms'], unit='ms', errors='coerce')
+    elif 'api_timestamp_micros' in events_df.columns:
+        events_df['event_timestamp'] = pd.to_datetime(events_df['api_timestamp_micros'], unit='us', errors='coerce')
     else:
         # If no timestamp is found, we can't process, so return an empty frame or handle appropriately
-        print("Warning: No timestamp field found in event data. Supported fields are 'timestamp_micros' or 'request_start_time_ms'.")
+        print("Warning: No timestamp field found in event data. Supported fields are 'timestamp_micros', 'request_start_time_ms', or 'api_timestamp_micros'.")
         # Create an empty event_timestamp column to avoid crashing later
         events_df['event_timestamp'] = pd.NaT
 

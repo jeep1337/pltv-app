@@ -1,4 +1,5 @@
 import json
+import time
 import joblib
 import pandas as pd
 from flask import Flask, request, jsonify
@@ -94,12 +95,20 @@ def event():
     if not customer_id or not event_payload:
         return jsonify({'error': 'customer_id and event_data are required'}), 400
 
+    # --- Start: Inject Server-Side Timestamp ---
+    if 'events' in event_payload and isinstance(event_payload['events'], list):
+        current_timestamp_micros = int(time.time() * 1_000_000)
+        for event in event_payload['events']:
+            if isinstance(event, dict):
+                event['api_timestamp_micros'] = current_timestamp_micros
+    # --- End: Inject Server-Side Timestamp ---
+
     conn = connect_db()
     if conn:
         try:
             cur = conn.cursor()
             print(f"Received event for customer_id: {customer_id}")
-            print(f"Event payload: {event_payload}")
+            print(f"Event payload (with server timestamp): {event_payload}")
 
             # Check if customer_id already exists
             cur.execute("SELECT event_data FROM customers WHERE customer_id = %s", (customer_id,))
@@ -107,12 +116,10 @@ def event():
 
             if existing_record:
                 # Customer exists, update event_data by appending new event
-                existing_event_data = existing_record[0] # This is already a Python dict from JSONB
+                existing_event_data = existing_record[0]
                 if 'events' not in existing_event_data or not isinstance(existing_event_data['events'], list):
-                    existing_event_data['events'] = [] # Initialize if not an array
+                    existing_event_data['events'] = []
 
-                # event_payload from request is {'events': [...]}
-                # We need to append the *contents* of event_payload['events']
                 if 'events' in event_payload and isinstance(event_payload['events'], list):
                     existing_event_data['events'].extend(event_payload['events'])
 
@@ -133,7 +140,7 @@ def event():
             return jsonify({'message': 'Event data stored successfully'}), 200
         except Exception as e:
             print(f"Error storing event data: {e}")
-            conn.rollback() # Rollback in case of error
+            conn.rollback()
             return jsonify({'error': str(e)}), 500
         finally:
             conn.close()
