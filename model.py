@@ -103,7 +103,14 @@ def preprocess_data(df):
     customer_features['last_purchase_date'] = customer_features['last_purchase_date'].fillna(pd.to_datetime('1970-01-01').tz_localize(None))
     customer_features['days_since_last_purchase'] = (current_date - customer_features['last_purchase_date']).dt.days
 
-    customer_features['first_event_date'] = events_df.groupby('customer_id')['event_timestamp'].min().reset_index(name='first_event_date')['first_event_date']
+    # Get the first event date for each customer
+    first_event_dates = events_df.groupby('customer_id')['event_timestamp'].min().reset_index()
+    first_event_dates = first_event_dates.rename(columns={'event_timestamp': 'first_event_date'})
+
+    # Merge this back into the main customer_features dataframe
+    customer_features = pd.merge(customer_features, first_event_dates[['customer_id', 'first_event_date']], on='customer_id', how='left')
+
+    # Now calculate the time since the first event
     customer_features['time_since_first_event'] = (current_date - customer_features['first_event_date']).dt.days.fillna(0)
 
     customer_features['purchase_frequency'] = customer_features['number_of_purchases'] / customer_features['time_since_first_event']
