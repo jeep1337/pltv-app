@@ -40,6 +40,7 @@ def preprocess_data(df):
         ])
 
     events_df = pd.DataFrame(all_individual_events)
+    print("--- events_df before timestamp conversion ---\n", events_df.to_string())
 
     if 'value' not in events_df.columns:
         events_df['value'] = 0.0
@@ -57,6 +58,8 @@ def preprocess_data(df):
         print("Warning: No timestamp field found in event data. Supported fields are 'timestamp_micros', 'request_start_time_ms', or 'api_timestamp_micros'.")
         # Create an empty event_timestamp column to avoid crashing later
         events_df['event_timestamp'] = pd.NaT
+
+    print("--- events_df after timestamp conversion ---\n", events_df.to_string())
 
     events_df['event_timestamp'] = events_df['event_timestamp'].dt.tz_localize(None)
     events_df = events_df.dropna(subset=['event_timestamp'])
