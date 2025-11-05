@@ -2,14 +2,19 @@ import json
 import time
 import joblib
 import pandas as pd
+import os
 from flask import Flask, request, jsonify
 from database import connect_db, create_customers_table, get_all_customer_events, get_customer_events
 from model import preprocess_data
 
 app = Flask(__name__)
 
+# Construct path to the model file relative to this script's location
+script_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(script_dir, 'pltv_model.pkl')
+
 # Load the trained model
-model = joblib.load('pltv_model.pkl')
+model = joblib.load(model_path)
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -95,20 +100,25 @@ def event():
     if not customer_id or not event_payload:
         return jsonify({'error': 'customer_id and event_data are required'}), 400
 
-    # --- Start: Inject Server-Side Timestamp ---
+    # --- Start: Normalize event payload and Inject Timestamp ---
+    # This makes the endpoint more robust to different sGTM data structures.
+    if isinstance(event_payload, dict) and 'events' not in event_payload:
+        # If payload is a single event, wrap it in the expected list structure.
+        event_payload = {'events': [event_payload]}
+
     if 'events' in event_payload and isinstance(event_payload['events'], list):
         current_timestamp_micros = int(time.time() * 1_000_000)
         for event in event_payload['events']:
             if isinstance(event, dict):
                 event['api_timestamp_micros'] = current_timestamp_micros
-    # --- End: Inject Server-Side Timestamp ---
+    # --- End: Normalize event payload and Inject Timestamp ---
 
     conn = connect_db()
     if conn:
         try:
             cur = conn.cursor()
             print(f"Received event for customer_id: {customer_id}")
-            print(f"Event payload (with server timestamp): {event_payload}")
+            print(f"Normalized Event payload (with server timestamp): {event_payload}")
 
             # Check if customer_id already exists
             cur.execute("SELECT event_data FROM customers WHERE customer_id = %s", (customer_id,))
