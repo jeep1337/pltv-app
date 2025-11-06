@@ -77,7 +77,88 @@ def get_customer_events(customer_id):
             return []
         finally:
             conn.close()
-    return []
+
+
+def create_customer_features_table():
+    """Creates a customer_features table if it doesn't exist."""
+    conn = connect_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS customer_features (
+                    id SERIAL PRIMARY KEY,
+                    customer_id VARCHAR(255) UNIQUE NOT NULL,
+                    total_purchase_value FLOAT DEFAULT 0,
+                    number_of_purchases INTEGER DEFAULT 0,
+                    average_purchase_value FLOAT DEFAULT 0,
+                    total_items_purchased INTEGER DEFAULT 0,
+                    distinct_products_purchased INTEGER DEFAULT 0,
+                    distinct_brands_purchased INTEGER DEFAULT 0,
+                    distinct_products_viewed INTEGER DEFAULT 0,
+                    distinct_brands_viewed INTEGER DEFAULT 0,
+                    number_of_page_views INTEGER DEFAULT 0,
+                    days_since_last_purchase INTEGER DEFAULT 0,
+                    time_since_first_event INTEGER DEFAULT 0,
+                    purchase_frequency FLOAT DEFAULT 0,
+                    pltv FLOAT DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
+            print("Customer features table created or already exists.")
+        except Exception as e:
+            print(f"Error creating customer_features table: {e}")
+        finally:
+            conn.close()
+
+def get_customer_features(customer_id):
+    """Retrieves pre-aggregated features for a specific customer."""
+    conn = connect_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM customer_features WHERE customer_id = %s", (customer_id,))
+            features = cur.fetchone()
+            if features:
+                # Convert tuple to dict
+                colnames = [desc[0] for desc in cur.description]
+                return dict(zip(colnames, features))
+            return None
+        except Exception as e:
+            print(f"Error retrieving features for customer {customer_id}: {e}")
+            return None
+        finally:
+            conn.close()
+    return None
+
+def upsert_customer_features(features_dict):
+    """Inserts or updates a customer's features in the database."""
+    conn = connect_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            
+            columns = ", ".join(features_dict.keys())
+            placeholders = ", ".join([f"%({key})s" for key in features_dict.keys()])
+            
+            update_str = ", ".join([f"{key} = EXCLUDED.{key}" for key in features_dict.keys() if key != 'customer_id'])
+            
+            query = f"""
+                INSERT INTO customer_features ({columns}) 
+                VALUES ({placeholders}) 
+                ON CONFLICT (customer_id) 
+                DO UPDATE SET {update_str}, updated_at = CURRENT_TIMESTAMP
+            """
+            
+            cur.execute(query, features_dict)
+            conn.commit()
+        except Exception as e:
+            print(f"Error upserting customer features: {e}")
+            conn.rollback()
+        finally:
+            conn.close()
 
 if __name__ == "__main__":
     create_customers_table()
+    create_customer_features_table()

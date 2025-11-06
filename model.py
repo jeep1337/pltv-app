@@ -1,161 +1,93 @@
+
 import pandas as pd
-import numpy as np
-from database import get_all_customer_events, clear_customers_table
 from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 import joblib
+from database import get_all_customer_events, clear_customers_table
+from features import calculate_features
 
 def load_data():
-    """Loads event data from the database and returns a pandas DataFrame."""
+    """Loads raw event data from the database."""
     events = get_all_customer_events()
     print("Raw events list from database:")
-    print(events)
-    df = pd.DataFrame(events, columns=['customer_id', 'event_data', 'created_at'])
-    print("Raw DataFrame from database:")
-    print(df)
-    return df
+    # print(events) # This can be very verbose
+    return events
 
-def preprocess_data(df):
-    print("Executing preprocess_data with event_name fix - v2")
-    """Preprocesses the data and creates features for the model."""
+def preprocess_data_for_training(raw_events):
+    """Preprocesses the raw event data for model training."""
     all_individual_events = []
-
-    for index, row in df.iterrows():
-        customer_id = row['customer_id']
-        event_payload = row['event_data']
-
-        if isinstance(event_payload, dict) and 'events' in event_payload and isinstance(event_payload['events'], list):
-            for event in event_payload['events']:
-                event_with_customer_id = event.copy()
-                event_with_customer_id['customer_id'] = customer_id
-                all_individual_events.append(event_with_customer_id)
+    for customer_id, event_data, _ in raw_events:
+        if isinstance(event_data, dict) and 'events' in event_data and isinstance(event_data['events'], list):
+            for event in event_data['events']:
+                event_with_id = event.copy()
+                event_with_id['customer_id'] = customer_id
+                all_individual_events.append(event_with_id)
 
     if not all_individual_events:
-        return pd.DataFrame(columns=[
-            'customer_id', 'total_purchase_value', 'number_of_purchases',
-            'average_purchase_value', 'last_purchase_date', 'first_purchase_date',
-            'number_of_page_views', 'days_since_last_purchase',
-            'first_event_date', 'time_since_first_event', 'purchase_frequency', 'pltv'
-        ])
+        return pd.DataFrame()
 
     events_df = pd.DataFrame(all_individual_events)
+    
+    # Use the centralized feature calculation function
+    customer_features_df = calculate_features(events_df)
+    
+    print("Customer Features DataFrame for Training:")
+    print(customer_features_df)
 
-    if 'value' not in events_df.columns:
-        events_df['value'] = 0.0
-    else:
-        events_df['value'] = pd.to_numeric(events_df['value'], errors='coerce').fillna(0.0)
-
-    if 'timestamp_micros' in events_df.columns:
-        events_df['event_timestamp'] = pd.to_datetime(events_df['timestamp_micros'], unit='us', errors='coerce')
-    elif 'request_start_time_ms' in events_df.columns:
-        events_df['event_timestamp'] = pd.to_datetime(events_df['request_start_time_ms'], unit='ms', errors='coerce')
-    elif 'api_timestamp_micros' in events_df.columns:
-        events_df['event_timestamp'] = pd.to_datetime(events_df['api_timestamp_micros'], unit='us', errors='coerce')
-    else:
-        # If no timestamp is found, we can't process, so return an empty frame or handle appropriately
-        print("Warning: No timestamp field found in event data. Supported fields are 'timestamp_micros', 'request_start_time_ms', or 'api_timestamp_micros'.")
-        # Create an empty event_timestamp column to avoid crashing later
-        events_df['event_timestamp'] = pd.NaT
-
-    events_df['event_timestamp'] = events_df['event_timestamp'].dt.tz_localize(None)
-    events_df = events_df.dropna(subset=['event_timestamp'])
-
-    if 'event_name' in events_df.columns:
-        purchases = events_df[events_df['event_name'] == 'purchase']
-        page_views = events_df[events_df['event_name'] == 'page_view']
-        event_name_col = 'event_name'
-    elif 'event_type' in events_df.columns:
-        print("Warning: 'event_name' not found, falling back to 'event_type'.")
-        purchases = events_df[events_df['event_type'] == 'purchase']
-        page_views = events_df[events_df['event_type'] == 'page_view']
-        event_name_col = 'event_type'
-    else:
-        print("Error: Neither 'event_name' nor 'event_type' found in event data.")
-        # Return an empty dataframe with the expected columns to avoid crashing
-        return pd.DataFrame(columns=[
-            'customer_id', 'total_purchase_value', 'number_of_purchases',
-            'average_purchase_value', 'number_of_page_views', 'days_since_last_purchase',
-            'purchase_frequency', 'time_since_first_event', 'pltv'
-        ])
-
-    purchase_features = purchases.groupby('customer_id').agg(
-        total_purchase_value=('value', 'sum'),
-        number_of_purchases=(event_name_col, 'count'),
-        last_purchase_date=('event_timestamp', 'max'),
-        first_purchase_date=('event_timestamp', 'min'),
-    ).reset_index()
-
-    purchase_features['average_purchase_value'] = purchase_features.apply(
-        lambda row: row['total_purchase_value'] / row['number_of_purchases'] if row['number_of_purchases'] > 0 else 0,
-        axis=1
-    )
-
-    page_view_features = page_views.groupby('customer_id').agg(
-        number_of_page_views=(event_name_col, 'count')
-    ).reset_index()
-
-    all_customers = pd.DataFrame(df['customer_id'].unique(), columns=['customer_id'])
-    customer_features = pd.merge(all_customers, purchase_features, on='customer_id', how='left')
-    customer_features = pd.merge(customer_features, page_view_features, on='customer_id', how='left')
-
-    current_date = pd.to_datetime('now').tz_localize(None)
-    customer_features['last_purchase_date'] = customer_features['last_purchase_date'].fillna(pd.to_datetime('1970-01-01').tz_localize(None))
-    customer_features['days_since_last_purchase'] = (current_date - customer_features['last_purchase_date']).dt.days
-
-    # Get the first event date for each customer
-    first_event_dates = events_df.groupby('customer_id')['event_timestamp'].min().reset_index()
-    first_event_dates = first_event_dates.rename(columns={'event_timestamp': 'first_event_date'})
-
-    # Merge this back into the main customer_features dataframe
-    customer_features = pd.merge(customer_features, first_event_dates[['customer_id', 'first_event_date']], on='customer_id', how='left')
-
-    # Now calculate the time since the first event
-    customer_features['time_since_first_event'] = (current_date - customer_features['first_event_date']).dt.days.fillna(0)
-    # Ensure time_since_first_event is at least 1 to avoid division by zero and represent initial activity
-    customer_features['time_since_first_event'] = customer_features['time_since_first_event'].apply(lambda x: max(x, 1))
-
-    customer_features['purchase_frequency'] = customer_features['number_of_purchases'] / customer_features['time_since_first_event']
-    customer_features['purchase_frequency'] = customer_features['purchase_frequency'].replace([np.inf, -np.inf], 0).fillna(0)
-
-    customer_features = customer_features.drop(columns=['last_purchase_date', 'first_purchase_date', 'first_event_date'])
-    customer_features = customer_features.fillna(0)
-    customer_features['pltv'] = customer_features['total_purchase_value']
-
-    print("Customer Features DataFrame:")
-    print(customer_features)
-
-    return customer_features
+    return customer_features_df
 
 def train_model(df):
-    """Trains a simple linear regression model."""
-    X = df[['total_purchase_value', 'number_of_purchases', 'number_of_page_views', 'days_since_last_purchase', 'purchase_frequency', 'average_purchase_value']]
+    """Trains the RandomForestRegressor model."""
+    feature_columns = [
+        'total_purchase_value', 'number_of_purchases', 'number_of_page_views',
+        'days_since_last_purchase', 'purchase_frequency', 'average_purchase_value',
+        'total_items_purchased', 'distinct_products_purchased', 'distinct_brands_purchased',
+        'distinct_products_viewed', 'distinct_brands_viewed'
+    ]
+    
+    # Ensure all feature columns exist, fill with 0 if not
+    for col in feature_columns:
+        if col not in df.columns:
+            df[col] = 0
+            
+    X = df[feature_columns]
     y = df['pltv']
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    n_samples = len(df)
 
-    # Define the parameter grid for GridSearchCV
-    param_grid = {
-        'n_estimators': [50, 100, 200],
-        'max_depth': [None, 10, 20],
-        'min_samples_split': [2, 5, 10]
-    }
+    # If the dataset is too small, skip grid search and train a default model
+    if n_samples < 5:
+        print("Warning: Dataset is too small for GridSearchCV. Training a default RandomForestRegressor.")
+        model = RandomForestRegressor(random_state=42)
+        model.fit(X, y)
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        # Adjust cv to be at most the number of samples if it's greater
+        cv = min(len(X_train), 3)
+        if cv < 2:
+            cv = 2 # cv must be at least 2
 
-    # Initialize the RandomForestRegressor
-    rf = RandomForestRegressor(random_state=42)
+        param_grid = {
+            'n_estimators': [50, 100, 200],
+            'max_depth': [None, 10, 20],
+            'min_samples_split': [2, 5, 10]
+        }
 
-    # Initialize GridSearchCV
-    grid_search = GridSearchCV(estimator=rf, param_grid=param_grid, cv=3, n_jobs=-1, verbose=2)
+        rf = RandomForestRegressor(random_state=42)
+        grid_search = GridSearchCV(estimator=rf, param_grid=param_grid, cv=cv, n_jobs=-1, verbose=2)
+        grid_search.fit(X_train, y_train)
+        model = grid_search.best_estimator_
+        print(f"Best Hyperparameters: {grid_search.best_params_}")
 
-    # Fit GridSearchCV to the training data
-    grid_search.fit(X_train, y_train)
-
-    # Get the best model
-    model = grid_search.best_estimator_
-
-    # Print the best hyperparameters and feature importances
-    print(f"Best Hyperparameters: {grid_search.best_params_}")
-    print(f"Model Feature Importances: {model.feature_importances_}")
+    # Create a DataFrame for feature importances
+    importances = pd.DataFrame({
+        'feature': feature_columns,
+        'importance': model.feature_importances_
+    }).sort_values('importance', ascending=False)
+    
+    print("Model Feature Importances:")
+    print(importances)
 
     return model
 
@@ -164,9 +96,22 @@ def save_model(model):
     joblib.dump(model, 'pltv_model.pkl')
 
 if __name__ == '__main__':
-    # clear_customers_table() # Temporarily commented out for data loading
-    df = load_data()
-    df = preprocess_data(df)
-    model = train_model(df)
-    save_model(model)
-    print("Model trained and saved successfully.")
+    # Optional: Clear the database for a fresh start
+    # clear_customers_table()
+    
+    print("Loading raw event data...")
+    raw_events = load_data()
+    
+    print("Preprocessing data and calculating features for training...")
+    features_df = preprocess_data_for_training(raw_events)
+    
+    if not features_df.empty:
+        print("Training model...")
+        model = train_model(features_df)
+        
+        print("Saving model...")
+        save_model(model)
+        
+        print("Model training and saving process completed successfully.")
+    else:
+        print("No data available to train the model.")

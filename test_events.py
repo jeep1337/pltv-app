@@ -103,7 +103,12 @@ def main():
         "number_of_purchases": 2,
         "total_purchase_value": purchase_1_value + purchase_2_value,
         "average_purchase_value": (purchase_1_value + purchase_2_value) / 2,
-        "number_of_page_views": 3
+        "number_of_page_views": 3,
+        "total_items_purchased": 3,
+        "distinct_products_purchased": 2,
+        "distinct_brands_purchased": 2,
+        "distinct_products_viewed": 2,
+        "distinct_brands_viewed": 2
     }
 
     # 1. Clear the database
@@ -113,13 +118,17 @@ def main():
     print("\n--- Simulating User Journey ---")
     send_event(test_customer_id, "page_view")
     time.sleep(0.1)
+    send_event(test_customer_id, "view_item", {"items": [{"item_id": "SKU_123", "item_brand": "Brand A"}]})
+    time.sleep(0.1)
     send_event(test_customer_id, "page_view")
     time.sleep(0.1)
-    send_event(test_customer_id, "purchase", {"value": purchase_1_value})
+    send_event(test_customer_id, "add_to_cart", {"items": [{"item_id": "SKU_456", "item_brand": "Brand B"}]})
+    time.sleep(0.1)
+    send_event(test_customer_id, "purchase", {"value": purchase_1_value, "items": [{"item_id": "SKU_123", "item_brand": "Brand A", "quantity": 1}]})
     time.sleep(0.1) # Simulate time between events
     send_event(test_customer_id, "page_view")
     time.sleep(0.1)
-    send_event(test_customer_id, "purchase", {"value": purchase_2_value})
+    send_event(test_customer_id, "purchase", {"value": purchase_2_value, "items": [{"item_id": "SKU_789", "item_brand": "Brand C", "quantity": 2}]})
 
     # 3. Get and validate the prediction
     validate_prediction(test_customer_id, expected)
