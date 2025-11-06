@@ -44,6 +44,9 @@ def calculate_features(events_df):
     # --- Feature Aggregation ---
 
     # Purchase Features
+    if 'value' not in purchases.columns:
+        purchases['value'] = 0
+        
     purchase_features = purchases.groupby('customer_id').agg(
         total_purchase_value=('value', 'sum'),
         number_of_purchases=(event_name_col, 'count'),
