@@ -44,9 +44,10 @@ def calculate_features(events_df):
     # --- Feature Aggregation ---
 
     # Purchase Features
-    if 'value' not in purchases.columns:
-        purchases.loc[:, 'value'] = 0
-    purchases.loc[:, 'value'] = pd.to_numeric(purchases['value'], errors='coerce').fillna(0)
+    if not purchases.empty:
+        if 'value' not in purchases.columns:
+            purchases.loc[:, 'value'] = 0
+        purchases.loc[:, 'value'] = pd.to_numeric(purchases['value'], errors='coerce').fillna(0)
         
     purchase_features = purchases.groupby('customer_id').agg(
         total_purchase_value=('value', 'sum'),

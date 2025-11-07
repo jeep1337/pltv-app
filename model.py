@@ -53,32 +53,8 @@ def train_model(df):
     X = df[feature_columns]
     y = df['pltv']
 
-    n_samples = len(df)
-
-    # If the dataset is too small, skip grid search and train a default model
-    if n_samples < 5:
-        print("Warning: Dataset is too small for GridSearchCV. Training a default RandomForestRegressor.")
-        model = RandomForestRegressor(random_state=42)
-        model.fit(X, y)
-    else:
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        
-        # Adjust cv to be at most the number of samples if it's greater
-        cv = min(len(X_train), 3)
-        if cv < 2:
-            cv = 2 # cv must be at least 2
-
-        param_grid = {
-            'n_estimators': [50, 100, 200],
-            'max_depth': [None, 10, 20],
-            'min_samples_split': [2, 5, 10]
-        }
-
-        rf = RandomForestRegressor(random_state=42)
-        grid_search = GridSearchCV(estimator=rf, param_grid=param_grid, cv=cv, n_jobs=-1, verbose=2)
-        grid_search.fit(X_train, y_train)
-        model = grid_search.best_estimator_
-        print(f"Best Hyperparameters: {grid_search.best_params_}")
+    model = RandomForestRegressor(random_state=42)
+    model.fit(X, y)
 
     # Create a DataFrame for feature importances
     importances = pd.DataFrame({
@@ -96,8 +72,7 @@ def save_model(model):
     joblib.dump(model, 'pltv_model.pkl')
 
 if __name__ == '__main__':
-    # Optional: Clear the database for a fresh start
-    # clear_customers_table()
+
     
     print("Loading raw event data...")
     raw_events = load_data()
