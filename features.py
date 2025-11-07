@@ -44,22 +44,27 @@ def calculate_features(events_df):
     # --- Feature Aggregation ---
 
     # Purchase Features
-    if not purchases.empty:
+    if purchases.empty:
+        purchase_features = pd.DataFrame(columns=[
+            'customer_id', 'total_purchase_value', 'number_of_purchases',
+            'last_purchase_date', 'first_purchase_date', 'average_purchase_value'
+        ])
+    else:
         if 'value' not in purchases.columns:
             purchases.loc[:, 'value'] = 0
         purchases.loc[:, 'value'] = pd.to_numeric(purchases['value'], errors='coerce').fillna(0)
         
-    purchase_features = purchases.groupby('customer_id').agg(
-        total_purchase_value=('value', 'sum'),
-        number_of_purchases=(event_name_col, 'count'),
-        last_purchase_date=('event_timestamp', 'max'),
-        first_purchase_date=('event_timestamp', 'min'),
-    ).reset_index()
+        purchase_features = purchases.groupby('customer_id').agg(
+            total_purchase_value=('value', 'sum'),
+            number_of_purchases=(event_name_col, 'count'),
+            last_purchase_date=('event_timestamp', 'max'),
+            first_purchase_date=('event_timestamp', 'min'),
+        ).reset_index()
 
-    purchase_features['average_purchase_value'] = purchase_features.apply(
-        lambda row: row['total_purchase_value'] / row['number_of_purchases'] if row['number_of_purchases'] > 0 else 0,
-        axis=1
-    )
+        purchase_features['average_purchase_value'] = purchase_features.apply(
+            lambda row: row['total_purchase_value'] / row['number_of_purchases'] if row['number_of_purchases'] > 0 else 0,
+            axis=1
+        )
 
     # Product-level Purchase Features
     product_events = []
