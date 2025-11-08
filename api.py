@@ -14,6 +14,7 @@ from database import (
     upsert_customer_features
 )
 from features import calculate_features
+from model import retrain_and_save_model
 
 app = Flask(__name__)
 
@@ -149,6 +150,22 @@ def event():
             conn.close()
             
     return jsonify({'error': 'Database connection failed'}), 500
+
+@app.route('/retrain', methods=['POST'])
+def retrain():
+    """Endpoint to trigger model retraining."""
+    secret_key = request.args.get('secret')
+    retrain_secret_key = os.environ.get('RETRAIN_SECRET_KEY')
+
+    if not secret_key or secret_key != retrain_secret_key:
+        return jsonify({'error': 'Invalid or missing secret key'}), 401
+
+    try:
+        message = retrain_and_save_model()
+        return jsonify({'message': message}), 200
+    except Exception as e:
+        app.logger.error(f"Error during model retraining: {e}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     create_customers_table()

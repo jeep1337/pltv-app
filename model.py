@@ -71,9 +71,8 @@ def save_model(model):
     """Saves the trained model to a file."""
     joblib.dump(model, 'pltv_model.pkl')
 
-if __name__ == '__main__':
-
-    
+def retrain_and_save_model():
+    """Loads data, trains the model, and saves it."""
     print("Loading raw event data...")
     raw_events = load_data()
     
@@ -87,6 +86,10 @@ if __name__ == '__main__':
         print("Saving model...")
         save_model(model)
         
-        print("Model training and saving process completed successfully.")
+        return "Model training and saving process completed successfully."
     else:
-        print("No data available to train the model.")
+        return "No data available to train the model."
+
+if __name__ == '__main__':
+    message = retrain_and_save_model()
+    print(message)
