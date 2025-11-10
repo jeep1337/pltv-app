@@ -153,7 +153,8 @@ def event():
 
 @app.route('/retrain', methods=['POST'])
 def retrain():
-    """Endpoint to trigger model retraining."""
+    """Endpoint to trigger model retraining and reload."""
+    global model
     secret_key = request.args.get('secret')
     retrain_secret_key = os.environ.get('RETRAIN_SECRET_KEY')
 
@@ -162,9 +163,12 @@ def retrain():
 
     try:
         message = retrain_and_save_model()
+        # Reload the model into the global variable
+        model = joblib.load(model_path)
+        app.logger.info("Model reloaded successfully after retraining.")
         return jsonify({'message': message}), 200
     except Exception as e:
-        app.logger.error(f"Error during model retraining: {e}")
+        app.logger.error(f"Error during model retraining or reloading: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
