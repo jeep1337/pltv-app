@@ -1,15 +1,4 @@
 
-import requests
-import json
-import time
-import subprocess
-import sys
-import os
-
-import json
-import time
-import sys
-import os
 from test_utils import (
     clear_database,
     send_event,
