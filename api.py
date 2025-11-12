@@ -44,7 +44,7 @@ db.create_all_tables()
 # Load the model artifact on startup
 load_model_artifact()
 
-@app.route('/event', methods=['PUT'])
+@app.route('/event', methods=['PUT', 'POST'])
 def event():
     try:
         event_data = request.get_json()
