@@ -1,181 +1,102 @@
+import pytest
 import requests
 import json
 import time
-import subprocess
-import sys
 import os
-
-# --- Configuration ---
-API_BASE_URL = "http://127.0.0.1:5000"
-# IMPORTANT: You must set this environment variable to match your secret key
-RETRAIN_SECRET_KEY = os.environ.get("RETRAIN_SECRET_KEY", "YOUR_SECRET_KEY") 
-TEST_CUSTOMER_ID = "retrain_test_customer_001"
+import sys
 
 from test_utils import (
     clear_database,
     send_event,
     get_prediction,
-    trigger_retraining
+    trigger_retraining,
+    reload_model_artifact
 )
 
-# --- Main Test Logic ---
+# --- Configuration ---
+API_BASE_URL = os.environ.get("PLTV_API_BASE_URL", "http://127.0.0.1:5000")
+RETRAIN_SECRET_KEY = os.environ.get("RETRAIN_SECRET_KEY", "YOUR_SECRET_KEY") 
 
-def main():
+# --- Test Logic ---
 
+def test_model_retraining():
     """Runs the full test sequence for model retraining and reloading."""
 
-    try:
-
-        TEST_CUSTOMER_ID = "retrain_test_customer_001"
-
-
-
-        # 1. Initial Setup
-
-        clear_database()
-
-        
-
-        # 2. Send first event and train the initial model
-
-        print("\n--- Step 1: Seeding initial data and training first model ---")
-
-        send_event(TEST_CUSTOMER_ID, "purchase", value=100.0)
-
-        if not trigger_retraining(wait_time=5):
-
-            sys.exit(1)
-
-
-
-        # 3. Get baseline prediction
-
-        print("\n--- Step 2: Getting baseline prediction ---")
-
-        pred_1_response = get_prediction(TEST_CUSTOMER_ID)
-
-        pred_1 = pred_1_response.get('pltv') if pred_1_response else None
-
-
-
-        # 4. Send a second event
-
-        print("\n--- Step 3: Sending second event to update customer history ---")
-
-        send_event(TEST_CUSTOMER_ID, "purchase", value=250.0)
-
-        
-
-        # 5. Get prediction BEFORE retraining
-
-        print("\n--- Step 4: Getting prediction BEFORE retraining ---")
-
-        print("(This should use the OLD model loaded in memory)")
-
-        pred_2_response = get_prediction(TEST_CUSTOMER_ID)
-
-        pred_2 = pred_2_response.get('pltv') if pred_2_response else None
-
-
-
-        # 6. Trigger retraining to load the new model
-
-        print("\n--- Step 5: Triggering retraining to load new model ---")
-
-        if not trigger_retraining(wait_time=5):
-
-            sys.exit(1)
-
-
-
-        # 7. Get prediction AFTER retraining
-
-        print("\n--- Step 6: Getting prediction AFTER retraining ---")
-
-        print("(This should use the NEWLY reloaded model)")
-
-        pred_3_response = get_prediction(TEST_CUSTOMER_ID)
-
-        pred_3 = pred_3_response.get('pltv') if pred_3_response else None
-
-
-
-        # 8. Verification
-
-        print("\n--- Step 7: Verifying results ---")
-
-
-
-        print(f"Prediction 1 (Baseline):      Got={pred_1}")
-
-        print(f"Prediction 2 (Pre-Retraining):  Got={pred_2}")
-
-        print(f"Prediction 3 (Post-Retraining): Got={pred_3}")
-
-
-
-        # --- Verification Logic ---
-
-        test_passed = True
-
-        
-
-        if pred_1 is None or pred_1 <= 0:
-
-            print(f"\n❌ FAILED: Baseline prediction ({pred_1}) should be a positive number.")
-
-            test_passed = False
-
-        else:
-
-            print(f"\n✅ PASSED: Baseline prediction ({pred_1}) is a positive number.")
-
-
-
-        if pred_1 != pred_2:
-
-            print(f"\n❌ FAILED: Prediction before retraining ({pred_2}) should be the same as baseline ({pred_1}).")
-
-            test_passed = False
-
-        else:
-
-            print(f"\n✅ PASSED: Prediction before retraining is correctly unchanged.")
-
-
-
-        if pred_2 == pred_3:
-
-            print(f"\n❌ FAILED: Prediction after retraining ({pred_3}) should be different from the pre-retraining prediction ({pred_2}).")
-
-            test_passed = False
-
-        else:
-
-            print(f"\n✅ PASSED: Prediction after retraining has correctly changed.")
-
-
-
-        if test_passed:
-
-            print("\n✅ ✅ ✅ TEST PASSED: Model reloading works as expected! ✅ ✅ ✅")
-
-        else:
-
-            print("\n❌ ❌ ❌ TEST FAILED: Model was not reloaded correctly. ❌ ❌ ❌")
-
-            sys.exit(1)
-
-
-
-    except RuntimeError as e:
-
-        print(f"\n\n❌ A critical error occurred during the test run: {e}", file=sys.stderr)
-
-        sys.exit(1)
-
-
-
-
-if __name__ == "__main__":
-    main()
+    TEST_CUSTOMER_ID = "retrain_test_customer_001"
+    TEST_CUSTOMER_ID_2 = "retrain_test_customer_002" # Add a second customer for training data
+    TEST_CUSTOMER_ID_3 = "retrain_test_customer_003"
+    TEST_CUSTOMER_ID_4 = "retrain_test_customer_004"
+
+    # 1. Initial Setup
+    clear_database()
+    
+    # 2. Send first events to seed initial data for two customers
+    print("\n--- Step 1: Seeding initial data for four customers ---")
+    send_event(TEST_CUSTOMER_ID, "purchase", {"value": 100.0})
+    send_event(TEST_CUSTOMER_ID_2, "purchase", {"value": 50.0}) # Second customer
+    send_event(TEST_CUSTOMER_ID_3, "purchase", {"value": 120.0})
+    send_event(TEST_CUSTOMER_ID_4, "purchase", {"value": 80.0})
+    time.sleep(0.5) # Give some time for events to be processed
+
+    # 3. Trigger initial retraining
+    print("\n--- Step 2: Triggering initial retraining ---")
+    if not trigger_retraining(wait_time=5):
+        pytest.fail("Initial retraining failed.")
+    
+    # 4. Reload the model artifact in the API
+    if not reload_model_artifact():
+        pytest.fail("Failed to reload model artifact after initial retraining.")
+
+    # 5. Get baseline prediction for TEST_CUSTOMER_ID
+    print("\n--- Step 3: Getting baseline prediction ---")
+    pred_1 = get_prediction(TEST_CUSTOMER_ID)
+    if pred_1 is None:
+        pytest.fail("Baseline prediction failed.")
+
+    # 6. Send a second event for TEST_CUSTOMER_ID
+    print("\n--- Step 4: Sending second event to update customer history ---")
+    send_event(TEST_CUSTOMER_ID, "purchase", {"value": 250.0})
+    time.sleep(0.5) # Give some time for event to be processed
+    
+    # 7. Get prediction BEFORE retraining (should use the OLD model)
+    print("\n--- Step 5: Getting prediction BEFORE retraining ---")
+    print("(This should use the OLD model loaded in memory)")
+    pred_2 = get_prediction(TEST_CUSTOMER_ID)
+    if pred_2 is None:
+        pytest.fail("Prediction before retraining failed.")
+
+    # 8. Trigger retraining to load the new model
+    print("\n--- Step 6: Triggering retraining to load new model ---")
+    if not trigger_retraining(wait_time=5):
+        pytest.fail("Retraining after second event failed.")
+    
+    # 9. Reload the model artifact in the API
+    if not reload_model_artifact():
+        pytest.fail("Failed to reload model artifact after second retraining.")
+
+    # 10. Get prediction AFTER retraining (should use the NEWLY reloaded model)
+    print("\n--- Step 7: Getting prediction AFTER retraining ---")
+    print("(This should use the NEWLY reloaded model)")
+    pred_3 = get_prediction(TEST_CUSTOMER_ID)
+    if pred_3 is None:
+        pytest.fail("Prediction after retraining failed.")
+
+    # 11. Verification
+    print("\n--- Step 8: Verifying results ---")
+
+    print(f"Prediction 1 (Baseline):      Got={pred_1}")
+    print(f"Prediction 2 (Pre-Retraining):  Got={pred_2}")
+    print(f"Prediction 3 (Post-Retraining): Got={pred_3}")
+
+    # --- Verification Logic ---
+    
+    # Baseline prediction should be positive
+    assert pred_1 > 0, f"Baseline prediction ({pred_1}) should be a positive number."
+
+    # Prediction before retraining should be the same as baseline (old model)
+    assert pred_1 == pred_2, f"Prediction before retraining ({pred_2}) should be the same as baseline ({pred_1})."
+
+    # Prediction after retraining should be different from the pre-retraining prediction (new model)
+    assert pred_2 != pred_3, f"Prediction after retraining ({pred_3}) should be different from the pre-retraining prediction ({pred_2})."
+
+    print("\n✅ ✅ ✅ TEST PASSED: Model reloading works as expected! ✅ ✅ ✅")

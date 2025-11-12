@@ -60,9 +60,10 @@ def event():
             return jsonify({"error": "Invalid JSON or empty request body"}), 400
         app.logger.info(f"Incoming event data: {json.dumps(event_data, indent=2)}")
 
-        events = event_data.get('events', [event_data])
+        events = event_data.get('events')
         if not isinstance(events, list):
-            events = [events]
+            app.logger.error("Incoming event data must contain a top-level 'events' key with a list of events.")
+            return jsonify({"error": "Invalid event data format: 'events' key with a list is required"}), 400
 
         processed_an_event = False
         for single_event in events:
@@ -94,11 +95,32 @@ def event():
 
             if event_name == 'purchase':
                 try:
-                    customer_events = db.get_customer_events(customer_id)
-                    if customer_events:
-                        features = calculate_features(customer_id, customer_events)
-                        db.upsert_customer_features(features)
-                        app.logger.info(f"Successfully recalculated features for customer {customer_id} after purchase.")
+                    customer_events_raw = db.get_customer_events(customer_id)
+                    if customer_events_raw:
+                        all_customer_event_dicts = []
+                        for _, event_data_dict, _ in customer_events_raw:
+                            # event_data_dict is already a Python dictionary
+                            all_customer_event_dicts.append(event_data_dict)
+                        
+                        # Ensure each event dict has the customer_id for calculate_features
+                        for event_dict in all_customer_event_dicts:
+                            if 'customer_id' not in event_dict:
+                                event_dict['customer_id'] = customer_id
+
+                        events_df = pd.DataFrame(all_customer_event_dicts)
+                        
+                        if not events_df.empty:
+                            features = calculate_features(events_df)
+                            
+                            # calculate_features returns a DataFrame, extract the row for this customer
+                            if not features.empty:
+                                customer_features_dict = features[features['customer_id'] == customer_id].iloc[0].to_dict()
+                                db.upsert_customer_features(customer_features_dict)
+                                app.logger.info(f"Successfully recalculated features for customer {customer_id} after purchase.")
+                            else:
+                                app.logger.warning(f"No features calculated for customer {customer_id} after purchase.")
+                        else:
+                            app.logger.warning(f"No valid event data found for customer {customer_id} to calculate features.")
                 except Exception as e:
                     app.logger.error(f"Error during full feature recalculation for customer {customer_id}: {e}")
             else:
@@ -112,9 +134,16 @@ def event():
         app.logger.error(f"Error processing event: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
-@app.route('/predict', methods=['GET'])
+@app.route('/predict', methods=['GET', 'POST'])
 def predict():
-    customer_id = request.args.get('customer_id')
+    customer_id = None
+    if request.method == 'GET':
+        customer_id = request.args.get('customer_id')
+    elif request.method == 'POST':
+        request_data = request.get_json()
+        if request_data:
+            customer_id = request_data.get('customer_id')
+
     if not customer_id:
         return jsonify({"error": "customer_id is required"}), 400
 
@@ -135,7 +164,7 @@ def predict():
 
     try:
         prediction = model.predict(X_predict)[0]
-        return jsonify({"customer_id": customer_id, "predicted_pltv": prediction}), 200
+        return jsonify({"pltv": prediction}), 200
     except Exception as e:
         app.logger.error(f"Error during prediction for customer {customer_id}: {e}")
         return jsonify({"error": "Error during prediction"}), 500
@@ -147,3 +176,12 @@ def retrain():
     thread.daemon = True  # Allow the main program to exit even if the thread is still running
     thread.start()
     return jsonify({"message": "Model retraining initiated in the background."}), 202
+
+@app.route('/reload_model', methods=['POST'])
+def reload_model():
+    secret = request.args.get('secret')
+    if secret != os.environ.get("RETRAIN_SECRET_KEY"):
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    load_model_artifact()
+    return jsonify({"message": "Model reload initiated."}), 200

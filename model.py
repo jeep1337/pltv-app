@@ -1,5 +1,6 @@
 
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import RandomForestRegressor
 import joblib
@@ -23,15 +24,15 @@ def preprocess_data_for_training(raw_events):
 
     # Group events by customer_id
     customer_events_map = {}
-    for customer_id, event_data, _ in raw_events:
+    for customer_id, event_data_dict, _ in raw_events:
         if customer_id not in customer_events_map:
             customer_events_map[customer_id] = []
         
-        if isinstance(event_data, dict) and 'events' in event_data and isinstance(event_data['events'], list):
-            for event in event_data['events']:
-                event_with_id = event.copy()
-                event_with_id['customer_id'] = customer_id
-                customer_events_map[customer_id].append(event_with_id)
+        # event_data_dict is already a Python dictionary representing a single event
+        event_with_id = event_data_dict.copy()
+        if 'customer_id' not in event_with_id:
+            event_with_id['customer_id'] = customer_id
+        customer_events_map[customer_id].append(event_with_id)
 
     if not customer_events_map:
         return pd.DataFrame()

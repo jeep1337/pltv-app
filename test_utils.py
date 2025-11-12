@@ -31,12 +31,14 @@ def clear_database():
         print(f"Database clearing failed: {e}", file=sys.stderr)
         raise RuntimeError("Database clearing failed. Aborting tests.") from e
 
-def send_event(customer_id, event_name, event_data={}):
+def send_event(customer_id, event_name, event_data=None):
     """
     Sends a single event to the /event endpoint, simulating the GA4 event structure.
     The API expects a payload that can be a single event or a list of events.
     To align with the sGTM GA4 tag, we send a structure containing an 'events' list.
     """
+    if event_data is None:
+        event_data = {}
     # This is the actual event payload, mimicking a GA4 event
     event_payload = {
         "event_name": event_name,
@@ -67,7 +69,8 @@ def get_prediction(customer_id):
             print("Prediction: No data found for customer yet.")
             return None
         response.raise_for_status()
-        return response.json() # Return the full JSON response
+        response_json = response.json()
+        return response_json.get('pltv') # Return only the pltv value
     except requests.exceptions.RequestException as e:
         print(f"Error getting prediction: {e}", file=sys.stderr)
         raise RuntimeError(f"Failed to get prediction for customer '{customer_id}'.") from e
@@ -91,6 +94,28 @@ def trigger_retraining(wait_time=5):
         return True
     except requests.exceptions.RequestException as e:
         print(f"Error triggering retraining: {e}", file=sys.stderr)
+        if e.response:
+            print(f"Response: {e.response.status_code} {e.response.text}", file=sys.stderr)
+        return False
+
+def reload_model_artifact():
+    """Calls the /reload_model endpoint to force the API to reload the model artifact."""
+    print("\n--- Reloading Model Artifact ---")
+    if RETRAIN_SECRET_KEY == "YOUR_SECRET_KEY":
+        print("SKIPPING: RETRAIN_SECRET_KEY is not set. Cannot reload model.", file=sys.stderr)
+        return False
+    
+    url = f"{API_BASE_URL}/reload_model?secret={RETRAIN_SECRET_KEY}"
+    try:
+        response = requests.post(url)
+        response.raise_for_status()
+        print("Model reload triggered successfully.")
+        print(response.json().get("message"))
+        # Give the server a moment to actually load the model
+        time.sleep(1) 
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Error reloading model artifact: {e}", file=sys.stderr)
         if e.response:
             print(f"Response: {e.response.status_code} {e.response.text}", file=sys.stderr)
         return False

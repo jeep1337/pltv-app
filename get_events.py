@@ -30,13 +30,8 @@ def main():
             print(f"Customer ID: {customer_id}")
             print(f"Created At: {created_at}")
             print("Event Data:")
-            # The data is a list of JSON objects, where each object has an 'events' key
-            # We should iterate and print them cleanly.
-            if isinstance(event_data, list):
-                for record in event_data:
-                    print(json.dumps(record, indent=2))
-            else: # Fallback for the older format
-                 print(json.dumps(event_data, indent=2))
+            # event_data is now a Python dictionary representing a single event
+            print(json.dumps(event_data, indent=2))
             print(f"{'='*20}")
 
     except Exception as e:

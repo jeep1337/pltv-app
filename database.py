@@ -2,6 +2,8 @@ import os
 import psycopg2
 from psycopg2 import pool
 from contextlib import contextmanager
+import json
+from psycopg2 import extras
 
 class Database:
     def __init__(self, min_conn=1, max_conn=10):
@@ -40,9 +42,20 @@ class Database:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS customers (
                     customer_id VARCHAR(255) PRIMARY KEY,
-                    event_data JSONB,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                 )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS customer_events_normalized (
+                    id SERIAL PRIMARY KEY,
+                    customer_id VARCHAR(255) NOT NULL,
+                    event_data JSONB,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_customer_events_normalized_customer_id ON customer_events_normalized (customer_id);
             """)
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS customer_features (
@@ -69,9 +82,9 @@ class Database:
         print("All tables created or already exist.")
 
     def get_all_customer_events(self):
-        """Retrieves all customer event data from the database."""
+        """Retrieves all customer event data from the customer_events_normalized table."""
         with self.get_cursor() as cur:
-            cur.execute("SELECT customer_id, event_data, created_at FROM customers")
+            cur.execute("SELECT customer_id, event_data, created_at FROM customer_events_normalized ORDER BY customer_id, created_at")
             return cur.fetchall()
 
     def clear_customers_table(self):
@@ -81,9 +94,9 @@ class Database:
         print("Customers table cleared.")
 
     def get_customer_events(self, customer_id):
-        """Retrieves all event data for a specific customer."""
+        """Retrieves all event data for a specific customer from the normalized table."""
         with self.get_cursor() as cur:
-            cur.execute("SELECT customer_id, event_data, created_at FROM customers WHERE customer_id = %s", (customer_id,))
+            cur.execute("SELECT customer_id, event_data, created_at FROM customer_events_normalized WHERE customer_id = %s ORDER BY created_at ASC", (customer_id,))
             return cur.fetchall()
 
     def get_customer_features(self, customer_id):
@@ -103,29 +116,38 @@ class Database:
         print("Customer features table cleared.")
 
     def clear_all_tables(self):
-        """Clears all data from all tables for a clean slate."""
-        self.clear_customers_table()
-        self.clear_customer_features_table()
+        """Drops and recreates all tables for a clean slate."""
+        with self.get_cursor(commit=True) as cur:
+            cur.execute("DROP TABLE IF EXISTS customer_features CASCADE")
+            cur.execute("DROP TABLE IF EXISTS customer_events_normalized CASCADE")
+            cur.execute("DROP TABLE IF EXISTS customers CASCADE")
+        print("All tables dropped.")
+        self.create_all_tables()
+        print("All tables recreated.")
 
     def upsert_event(self, customer_id, event_data):
         """
-        Inserts or updates raw event data into the customers table.
-        Relies on the caller to provide the correct customer_id.
+        Inserts a new event into the customer_events_normalized table.
+        Ensures the customer_id exists in the customers table.
         """
         if not customer_id:
             raise ValueError("customer_id must be provided to upsert an event.")
 
-        # Convert event_data to JSON string for storage
-        event_json = json.dumps(event_data)
+        event_json_obj = event_data # event_data is already a dict from api.py
 
-        query = """
-            INSERT INTO customers (customer_id, event_data)
-            VALUES (%s, %s)
-            ON CONFLICT (customer_id) DO UPDATE
-            SET event_data = customers.event_data || EXCLUDED.event_data, created_at = CURRENT_TIMESTAMP
-        """
         with self.get_cursor(commit=True) as cur:
-            cur.execute(query, (customer_id, event_json))
+            # 1. Ensure customer_id exists in the customers table
+            cur.execute("""
+                INSERT INTO customers (customer_id)
+                VALUES (%s)
+                ON CONFLICT (customer_id) DO NOTHING;
+            """, (customer_id,))
+
+            # 2. Insert the new event into customer_events_normalized
+            cur.execute("""
+                INSERT INTO customer_events_normalized (customer_id, event_data)
+                VALUES (%s, %s);
+            """, (customer_id, extras.Json(event_json_obj)))
 
 
     def upsert_customer_features(self, features_dict):
