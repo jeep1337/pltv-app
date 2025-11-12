@@ -93,9 +93,9 @@ def test_model_retraining():
     # Baseline prediction should be positive
     assert pred_1 > 0, f"Baseline prediction ({pred_1}) should be a positive number."
 
-    # Prediction before retraining should be the same as baseline (old model)
-    assert pred_1 == pred_2, f"Prediction before retraining ({pred_2}) should be the same as baseline ({pred_1})."
-
+    # Prediction before retraining should be different from baseline because features have changed
+    assert pred_1 != pred_2, f"Prediction before retraining ({pred_2}) should be different from baseline ({pred_1}) due to new event."
+    
     # Prediction after retraining should be different from the pre-retraining prediction (new model)
     assert pred_2 != pred_3, f"Prediction after retraining ({pred_3}) should be different from the pre-retraining prediction ({pred_2})."
 

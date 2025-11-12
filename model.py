@@ -1,4 +1,4 @@
-
+import os
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, GridSearchCV
@@ -6,6 +6,9 @@ from sklearn.ensemble import RandomForestRegressor
 import joblib
 from database import db
 from features import calculate_features
+import time
+
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'pltv_model.pkl')
 
 def load_data():
     """Loads raw event data from the database."""
@@ -128,8 +131,9 @@ def train_model(df):
 def save_model(model_artifact):
     """Saves the model artifact (dictionary) to a file."""
     if model_artifact:
-        joblib.dump(model_artifact, 'pltv_model.pkl')
+        joblib.dump(model_artifact, MODEL_PATH)
         print("Model artifact saved successfully.")
+        time.sleep(1) # Add a small delay to ensure the file is fully written
 
 def retrain_and_save_model():
     """Loads data, trains the model, and saves the resulting artifact."""

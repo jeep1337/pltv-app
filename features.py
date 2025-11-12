@@ -52,6 +52,14 @@ def calculate_features(events_df):
     # --- Feature Aggregation using GroupBy ---
     all_customers = pd.DataFrame({'customer_id': events_df['customer_id'].unique()})
 
+    # Ensure 'value' column exists, filling with 0 for non-purchase events or if missing
+    if 'value' not in events_df.columns:
+        events_df['value'] = 0.0
+    
+    # Ensure 'value' column exists, filling with 0 for non-purchase events or if missing
+    if 'value' not in events_df.columns:
+        events_df['value'] = 0.0
+    
     # Purchase-based features
     purchases = events_df[events_df[event_name_col] == 'purchase'].copy()
     purchases['value'] = pd.to_numeric(purchases['value'], errors='coerce').fillna(0)

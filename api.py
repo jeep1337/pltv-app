@@ -40,7 +40,10 @@ def load_model_artifact():
         else:
             app.logger.warning("Model artifact 'pltv_model.pkl' not found. Predictions will not be available until a model is trained.")
     except Exception as e:
-        app.logger.error(f"Error loading model artifact: {e}")
+        print(f"ERROR in api: Model artifact 'pltv_model.pkl' is malformed or incomplete. Error: {e}", file=sys.stderr)
+        model = None
+        model_features = None
+        model_metrics = None
 
 app = Flask(__name__)
 
