@@ -32,21 +32,24 @@ def clear_database():
         raise RuntimeError("Database clearing failed. Aborting tests.") from e
 
 def send_event(customer_id, event_name, event_data={}):
-    """Sends a single event to the /event endpoint."""
-    payload = {
-        "customer_id": customer_id,
-        "event_data": {
-            "events": [
-                {
-                    "event_name": event_name,
-                    "timestamp_micros": int(time.time() * 1_000_000),
-                    **event_data
-                }
-            ]
-        }
+    """
+    Sends a single event to the /event endpoint, simulating the GA4 event structure.
+    The API expects a payload that can be a single event or a list of events.
+    To align with the sGTM GA4 tag, we send a structure containing an 'events' list.
+    """
+    # This is the actual event payload, mimicking a GA4 event
+    event_payload = {
+        "event_name": event_name,
+        "client_id": customer_id,  # Use client_id to simulate the GA4 field
+        "timestamp_micros": int(time.time() * 1_000_000),
+        **event_data
     }
+    
+    # The API endpoint is designed to handle a batch of events in a list
+    final_payload = {"events": [event_payload]}
+
     try:
-        response = requests.post(f"{API_BASE_URL}/event", json=payload)
+        response = requests.post(f"{API_BASE_URL}/event", json=final_payload)
         response.raise_for_status()
         print(f"Sent event '{event_name}' for customer '{customer_id}'. Status: {response.status_code}")
     except requests.exceptions.RequestException as e:

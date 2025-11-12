@@ -60,13 +60,13 @@ def event():
             return jsonify({"error": "Invalid JSON or empty request body"}), 400
         app.logger.info(f"Incoming event data: {json.dumps(event_data, indent=2)}")
 
-        # Check if the payload contains a list of events
         events = event_data.get('events', [event_data])
         if not isinstance(events, list):
             events = [events]
 
+        processed_an_event = False
         for single_event in events:
-            # --- Start: Customer ID Extraction Logic ---
+            app.logger.info(f"Processing single event: {json.dumps(single_event, indent=2)}")
             customer_id = single_event.get('user_pseudo_id') or single_event.get('client_id')
 
             if not customer_id and isinstance(single_event, dict):
@@ -84,30 +84,28 @@ def event():
                     customer_id = single_event.get('_ga')
 
             if not customer_id:
-                app.logger.error("Event data must contain 'user_pseudo_id' or 'client_id' at top level or in common nested structures.")
-                # Continue to next event if one is malformed
+                app.logger.error("Skipping event: 'user_pseudo_id' or 'client_id' not found in event payload.")
                 continue
-            # --- End: Customer ID Extraction Logic ---
 
+            processed_an_event = True
             db.upsert_event(customer_id, single_event)
             
-            # --- Start: Hybrid Feature Update Logic ---
             event_name = single_event.get('event_name') or single_event.get('event_type')
 
-            # For purchase events, trigger a full recalculation for the specific customer
             if event_name == 'purchase':
                 try:
                     customer_events = db.get_customer_events(customer_id)
                     if customer_events:
                         features = calculate_features(customer_id, customer_events)
                         db.upsert_customer_features(features)
-                        app.logger.info(f"Successfully recalculated and upserted features for customer {customer_id} after purchase.")
+                        app.logger.info(f"Successfully recalculated features for customer {customer_id} after purchase.")
                 except Exception as e:
                     app.logger.error(f"Error during full feature recalculation for customer {customer_id}: {e}")
-            # For other common events, perform a fast, incremental update
             else:
                 db.update_features_incrementally(customer_id, single_event)
-            # --- End: Hybrid Feature Update Logic ---
+
+        if not processed_an_event:
+            return jsonify({"error": "No valid events with customer_id found in the payload"}), 400
 
         return jsonify({"message": "Events received and processed"}), 200
     except Exception as e:
