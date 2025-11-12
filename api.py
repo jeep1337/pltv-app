@@ -29,6 +29,11 @@ def load_model_artifact():
     try:
         if os.path.exists(model_path):
             model_artifact = joblib.load(model_path)
+            if not isinstance(model_artifact, dict) or 'model' not in model_artifact or 'features' not in model_artifact:
+                app.logger.error("Model artifact 'pltv_model.pkl' is malformed or incomplete.")
+                model = None
+                model_features = []
+                return
             model = model_artifact['model']
             model_features = model_artifact['features']
             app.logger.info(f"Model artifact loaded successfully. Features: {model_features}")

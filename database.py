@@ -107,6 +107,28 @@ class Database:
         self.clear_customers_table()
         self.clear_customer_features_table()
 
+    def upsert_event(self, event_data):
+        """
+        Inserts or updates raw event data into the customers table.
+        Expects event_data to contain 'user_pseudo_id' or 'client_id' for customer_id.
+        """
+        customer_id = event_data.get('user_pseudo_id') or event_data.get('client_id')
+        if not customer_id:
+            raise ValueError("Event data must contain 'user_pseudo_id' or 'client_id'.")
+
+        # Convert event_data to JSON string for storage
+        event_json = json.dumps(event_data)
+
+        query = """
+            INSERT INTO customers (customer_id, event_data)
+            VALUES (%s, %s)
+            ON CONFLICT (customer_id) DO UPDATE
+            SET event_data = customers.event_data || EXCLUDED.event_data, created_at = CURRENT_TIMESTAMP
+        """
+        with self.get_cursor(commit=True) as cur:
+            cur.execute(query, (customer_id, event_json))
+
+
     def upsert_customer_features(self, features_dict):
         """Inserts or updates a customer's features in the database securely."""
         # Whitelist of allowed columns to prevent SQL injection on column names
