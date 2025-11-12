@@ -52,6 +52,8 @@ load_model_artifact()
 @app.route('/event', methods=['PUT', 'POST'])
 def event():
     try:
+        app.logger.info(f"Incoming request Content-Type: {request.headers.get('Content-Type')}")
+        app.logger.info(f"Incoming raw request data: {request.data.decode('utf-8', errors='ignore')}")
         event_data = request.get_json()
         if event_data is None:
             app.logger.error("Incoming request body is not valid JSON or is empty.")
