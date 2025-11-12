@@ -63,13 +63,27 @@ def event():
             return jsonify({"error": "Invalid JSON or empty request body"}), 400
         app.logger.info(f"Incoming event data: {json.dumps(event_data, indent=2)}")
 
-        events = event_data.get('events')
-        if not isinstance(events, list):
-            app.logger.error("Incoming event data must contain a top-level 'events' key with a list of events.")
-            return jsonify({"error": "Invalid event data format: 'events' key with a list is required"}), 400
+        events = []
+        if isinstance(event_data, dict) and 'events' in event_data:
+            raw_events = event_data['events']
+            if isinstance(raw_events, list):
+                events = raw_events
+            else:
+                events = [raw_events]
+        elif isinstance(event_data, list):
+            events = event_data
+        elif isinstance(event_data, dict):
+            events = [event_data]
+
+        if not events:
+            app.logger.error("Incoming event data must contain a top-level 'events' list or be a valid GA4 event object.")
+            return jsonify({"error": "Invalid event data format: expecting 'events' list or single event object"}), 400
 
         processed_an_event = False
         for single_event in events:
+            if not isinstance(single_event, dict):
+                app.logger.error("Skipping event because it is not a JSON object: %s", single_event)
+                continue
             app.logger.info(f"Processing single event: {json.dumps(single_event, indent=2)}")
             customer_id = single_event.get('user_pseudo_id') or single_event.get('client_id')
 
