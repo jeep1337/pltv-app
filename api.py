@@ -53,6 +53,7 @@ load_model_artifact()
 def event():
     try:
         event_data = request.get_json()
+        app.logger.info(f"Incoming event data: {json.dumps(event_data, indent=2)}")
         if not event_data:
             return jsonify({"error": "Invalid JSON"}), 400
 
