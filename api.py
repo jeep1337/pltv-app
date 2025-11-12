@@ -53,9 +53,10 @@ load_model_artifact()
 def event():
     try:
         event_data = request.get_json()
+        if event_data is None:
+            app.logger.error("Incoming request body is not valid JSON or is empty.")
+            return jsonify({"error": "Invalid JSON or empty request body"}), 400
         app.logger.info(f"Incoming event data: {json.dumps(event_data, indent=2)}")
-        if not event_data:
-            return jsonify({"error": "Invalid JSON"}), 400
 
         # Assuming event_data contains 'client_id' and other event properties
         # You might need to adjust this based on the actual GA4 event structure
