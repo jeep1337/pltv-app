@@ -43,3 +43,54 @@ app = Flask(__name__)
 db.create_all_tables()
 # Load the model artifact on startup
 load_model_artifact()
+
+@app.route('/event', methods=['PUT'])
+def event():
+    try:
+        event_data = request.get_json()
+        if not event_data:
+            return jsonify({"error": "Invalid JSON"}), 400
+
+        # Assuming event_data contains 'client_id' and other event properties
+        # You might need to adjust this based on the actual GA4 event structure
+        db.upsert_event(event_data)
+        return jsonify({"message": "Event received and processed"}), 200
+    except Exception as e:
+        app.logger.error(f"Error processing event: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/predict', methods=['GET'])
+def predict():
+    customer_id = request.args.get('customer_id')
+    if not customer_id:
+        return jsonify({"error": "customer_id is required"}), 400
+
+    if model is None or not model_features:
+        return jsonify({"error": "Model not loaded or trained yet. Please retrain the model."}), 503
+
+    # Retrieve customer features from the database
+    customer_features_dict = db.get_customer_features(customer_id)
+    if not customer_features_dict:
+        return jsonify({"error": f"No features found for customer_id: {customer_id}"}), 404
+
+    # Convert features to DataFrame for prediction
+    # Ensure the order of features matches the model's expected features
+    features_df = pd.DataFrame([customer_features_dict])
+    
+    # Align columns with model_features, filling missing with 0
+    X_predict = features_df[model_features].fillna(0)
+
+    try:
+        prediction = model.predict(X_predict)[0]
+        return jsonify({"customer_id": customer_id, "predicted_pltv": prediction}), 200
+    except Exception as e:
+        app.logger.error(f"Error during prediction for customer {customer_id}: {e}")
+        return jsonify({"error": "Error during prediction"}), 500
+
+@app.route('/retrain', methods=['POST'])
+def retrain():
+    # Run retraining in a background thread to avoid blocking the API
+    thread = threading.Thread(target=retrain_and_save_model)
+    thread.daemon = True  # Allow the main program to exit even if the thread is still running
+    thread.start()
+    return jsonify({"message": "Model retraining initiated in the background."}), 202
