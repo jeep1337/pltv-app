@@ -107,32 +107,13 @@ class Database:
         self.clear_customers_table()
         self.clear_customer_features_table()
 
-    def upsert_event(self, event_data):
+    def upsert_event(self, customer_id, event_data):
         """
         Inserts or updates raw event data into the customers table.
-        Expects event_data to contain 'user_pseudo_id' or 'client_id' for customer_id.
+        Relies on the caller to provide the correct customer_id.
         """
-        customer_id = event_data.get('user_pseudo_id') or event_data.get('client_id')
-
-        # Try to extract from common nested GA4 structures if not found at top level
-        if not customer_id and isinstance(event_data, dict):
-            # Check for user_pseudo_id in user_properties (common in GA4)
-            user_properties = event_data.get('user_properties')
-            if user_properties and isinstance(user_properties, dict):
-                user_pseudo_id_obj = user_properties.get('user_pseudo_id')
-                if user_pseudo_id_obj and isinstance(user_pseudo_id_obj, dict):
-                    customer_id = user_pseudo_id_obj.get('value')
-            
-            # Check for client_id in client_info or _ga (less common for primary ID, but good to check)
-            if not customer_id:
-                client_info = event_data.get('client_info')
-                if client_info and isinstance(client_info, dict):
-                    customer_id = client_info.get('client_id')
-            if not customer_id:
-                customer_id = event_data.get('_ga') # Sometimes client_id is directly in _ga parameter
-
         if not customer_id:
-            raise ValueError("Event data must contain 'user_pseudo_id' or 'client_id' at top level or in common nested structures.")
+            raise ValueError("customer_id must be provided to upsert an event.")
 
         # Convert event_data to JSON string for storage
         event_json = json.dumps(event_data)
