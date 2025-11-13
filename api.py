@@ -186,13 +186,28 @@ def predict():
         app.logger.error(f"Error during prediction for customer {customer_id}: {e}")
         return jsonify({"error": "Error during prediction"}), 500
 
+def run_retrain_job():
+    """Background job: retrain model then reload artifact into memory."""
+    try:
+        result = retrain_and_save_model()
+        app.logger.info(f"Retrain job result: {result}")
+    except Exception as exc:
+        app.logger.error(f"Retrain job failed: {exc}")
+        return
+
+    try:
+        load_model_artifact()
+        app.logger.info("Model artifact reloaded after retrain job.")
+    except Exception as exc:
+        app.logger.error(f"Failed to reload model artifact after retraining: {exc}")
+
 @app.route('/retrain', methods=['POST'])
 def retrain():
     # Run retraining in a background thread to avoid blocking the API
-    thread = threading.Thread(target=retrain_and_save_model)
+    thread = threading.Thread(target=run_retrain_job)
     thread.daemon = True  # Allow the main program to exit even if the thread is still running
     thread.start()
-    return jsonify({"message": "Model retraining initiated in the background."}), 202
+    return jsonify({"message": "Model retraining initiated in the background and will auto-reload on completion."}), 202
 
 @app.route('/reload_model', methods=['POST'])
 def reload_model():
