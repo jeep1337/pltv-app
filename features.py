@@ -47,6 +47,8 @@ def calculate_features(events_df):
     event_name_col = 'event_name' if 'event_name' in events_df.columns else 'event_type'
     if event_name_col not in events_df.columns:
         return pd.DataFrame()
+    if events_df[event_name_col].dtype == object:
+        events_df[event_name_col] = events_df[event_name_col].str.lower()
 
     # --- Efficiently Process Nested Item Data ---
     def extract_items(df, event_name):
@@ -154,6 +156,7 @@ def calculate_features(events_df):
         if col not in customer_features.columns:
             customer_features[col] = 0
             
-    customer_features = customer_features[final_cols].fillna(0)
+    customer_features = customer_features[final_cols]
+    customer_features = customer_features.infer_objects(copy=False).fillna(0)
 
     return customer_features

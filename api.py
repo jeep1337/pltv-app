@@ -84,31 +84,38 @@ def event():
             if not isinstance(single_event, dict):
                 app.logger.error("Skipping event because it is not a JSON object: %s", single_event)
                 continue
-            app.logger.info(f"Processing single event: {json.dumps(single_event, indent=2)}")
-            customer_id = single_event.get('user_pseudo_id') or single_event.get('client_id')
+            # Work on a copy so we can normalize fields without mutating the input
+            event_record = dict(single_event)
+            app.logger.info(f"Processing single event: {json.dumps(event_record, indent=2)}")
+            customer_id = event_record.get('user_pseudo_id') or event_record.get('client_id')
 
             if not customer_id and isinstance(single_event, dict):
-                user_properties = single_event.get('user_properties')
+                user_properties = event_record.get('user_properties')
                 if user_properties and isinstance(user_properties, dict):
                     user_pseudo_id_obj = user_properties.get('user_pseudo_id')
                     if user_pseudo_id_obj and isinstance(user_pseudo_id_obj, dict):
                         customer_id = user_pseudo_id_obj.get('value')
                 
                 if not customer_id:
-                    client_info = single_event.get('client_info')
+                    client_info = event_record.get('client_info')
                     if client_info and isinstance(client_info, dict):
                         customer_id = client_info.get('client_id')
                 if not customer_id:
-                    customer_id = single_event.get('_ga')
+                    customer_id = event_record.get('_ga')
 
             if not customer_id:
                 app.logger.error("Skipping event: 'user_pseudo_id' or 'client_id' not found in event payload.")
                 continue
 
             processed_an_event = True
-            db.upsert_event(customer_id, single_event)
+            event_name_raw = event_record.get('event_name') or event_record.get('event_type')
+            normalized_event_name = event_name_raw.lower() if isinstance(event_name_raw, str) else None
+            if normalized_event_name:
+                event_record['event_name'] = normalized_event_name
+
+            db.upsert_event(customer_id, event_record)
             
-            event_name = single_event.get('event_name') or single_event.get('event_type')
+            event_name = normalized_event_name
 
             if event_name == 'purchase':
                 try:
@@ -141,7 +148,7 @@ def event():
                 except Exception as e:
                     app.logger.error(f"Error during full feature recalculation for customer {customer_id}: {e}")
             else:
-                db.update_features_incrementally(customer_id, single_event)
+                db.update_features_incrementally(customer_id, event_record)
 
         if not processed_an_event:
             return jsonify({"error": "No valid events with customer_id found in the payload"}), 400
