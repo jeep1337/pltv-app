@@ -38,7 +38,11 @@ def calculate_features(events_df):
     else:
         events_df['event_timestamp'] = events_df['event_timestamp'].fillna(pd.Timestamp.utcnow())
 
-    events_df['event_timestamp'] = pd.to_datetime(events_df['event_timestamp']).dt.tz_localize('UTC')
+    events_df['event_timestamp'] = pd.to_datetime(events_df['event_timestamp'])
+    if events_df['event_timestamp'].dt.tz is None:
+        events_df['event_timestamp'] = events_df['event_timestamp'].dt.tz_localize('UTC')
+    else:
+        events_df['event_timestamp'] = events_df['event_timestamp'].dt.tz_convert('UTC')
 
     event_name_col = 'event_name' if 'event_name' in events_df.columns else 'event_type'
     if event_name_col not in events_df.columns:
