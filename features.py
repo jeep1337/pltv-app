@@ -17,17 +17,27 @@ def calculate_features(events_df):
         return pd.DataFrame()
 
     # --- Timestamp and Event Name Normalization ---
-    for col in ['timestamp_micros', 'api_timestamp_micros']:
-        if col in events_df.columns:
-            events_df['event_timestamp'] = pd.to_datetime(events_df[col], unit='us', errors='coerce')
-            break
-    else:
-        if 'request_start_time_ms' in events_df.columns:
-            events_df['event_timestamp'] = pd.to_datetime(events_df['request_start_time_ms'], unit='ms', errors='coerce')
-        else:
-            events_df['event_timestamp'] = pd.NaT
+    timestamp_sources = [
+        ('event_timestamp', 'ns'),
+        ('event_time_micros', 'us'),
+        ('event_time_ms', 'ms'),
+        ('timestamp_micros', 'us'),
+        ('api_timestamp_micros', 'us'),
+        ('request_start_time_ms', 'ms')
+    ]
 
-    events_df = events_df.dropna(subset=['event_timestamp'])
+    events_df['event_timestamp'] = pd.NaT
+    for column, unit in timestamp_sources:
+        if column in events_df.columns:
+            events_df['event_timestamp'] = pd.to_datetime(events_df[column], unit=unit, errors='coerce')
+            break
+
+    if events_df['event_timestamp'].isna().all():
+        # Fallback: use current time when no recognizable timestamp is provided.
+        events_df['event_timestamp'] = pd.Timestamp.utcnow()
+    else:
+        events_df['event_timestamp'] = events_df['event_timestamp'].fillna(pd.Timestamp.utcnow())
+
     events_df['event_timestamp'] = pd.to_datetime(events_df['event_timestamp']).dt.tz_localize('UTC')
 
     event_name_col = 'event_name' if 'event_name' in events_df.columns else 'event_type'
