@@ -123,17 +123,26 @@ def event():
                     if customer_events_raw:
                         all_customer_event_dicts = []
                         for _, event_data_dict, _ in customer_events_raw:
-                            # event_data_dict is already a Python dictionary
-                            all_customer_event_dicts.append(event_data_dict)
+                            evt = event_data_dict
+                            # Defensive: handle legacy string storage
+                            if isinstance(evt, str):
+                                try:
+                                    evt = json.loads(evt)
+                                except Exception:
+                                    continue
+                            if not isinstance(evt, dict):
+                                continue
+                            # Normalize and stamp customer_id
+                            evt = dict(evt)
+                            evt.setdefault('customer_id', customer_id)
+                            # Normalize event_name casing
+                            if 'event_name' in evt and isinstance(evt['event_name'], str):
+                                evt['event_name'] = evt['event_name'].lower()
+                            all_customer_event_dicts.append(evt)
                         
-                        # Ensure each event dict has the customer_id for calculate_features
-                        for event_dict in all_customer_event_dicts:
-                            if 'customer_id' not in event_dict:
-                                event_dict['customer_id'] = customer_id
-
-                        events_df = pd.DataFrame(all_customer_event_dicts)
-                        
-                        if not events_df.empty:
+                        if all_customer_event_dicts:
+                            events_df = pd.DataFrame(all_customer_event_dicts)
+                            
                             features = calculate_features(events_df)
                             
                             # calculate_features returns a DataFrame, extract the row for this customer
@@ -145,8 +154,8 @@ def event():
                                 app.logger.warning(f"No features calculated for customer {customer_id} after purchase.")
                         else:
                             app.logger.warning(f"No valid event data found for customer {customer_id} to calculate features.")
-                except Exception as e:
-                    app.logger.error(f"Error during full feature recalculation for customer {customer_id}: {e}")
+                except Exception:
+                    app.logger.exception(f"Error during full feature recalculation for customer {customer_id}")
             else:
                 db.update_features_incrementally(customer_id, event_record)
 
