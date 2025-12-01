@@ -3,6 +3,38 @@ import pandas as pd
 import numpy as np
 from functools import reduce
 
+def _purchase_value_from_row(row):
+    """
+    Determine purchase value from either the top-level value field or by summing
+    item price * quantity when value is missing.
+    """
+    val = pd.to_numeric(row.get('value'), errors='coerce')
+    if pd.notnull(val):
+        return float(val)
+
+    total = 0.0
+    items = row.get('items')
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            price = item.get('price')
+            if price is None:
+                price = item.get('item_price')
+            if price is None:
+                price = item.get('item_revenue')
+            qty = item.get('quantity', 1)
+            try:
+                price_num = float(price)
+            except Exception:
+                price_num = 0.0
+            try:
+                qty_num = float(qty)
+            except Exception:
+                qty_num = 1.0
+            total += price_num * qty_num
+    return total
+
 def calculate_features(events_df):
     """
     Calculates features from a DataFrame of events in a more efficient and robust way.
@@ -68,17 +100,9 @@ def calculate_features(events_df):
     # --- Feature Aggregation using GroupBy ---
     all_customers = pd.DataFrame({'customer_id': events_df['customer_id'].unique()})
 
-    # Ensure 'value' column exists, filling with 0 for non-purchase events or if missing
-    if 'value' not in events_df.columns:
-        events_df['value'] = 0.0
-    
-    # Ensure 'value' column exists, filling with 0 for non-purchase events or if missing
-    if 'value' not in events_df.columns:
-        events_df['value'] = 0.0
-    
     # Purchase-based features
     purchases = events_df[events_df[event_name_col] == 'purchase'].copy()
-    purchases['value'] = pd.to_numeric(purchases['value'], errors='coerce').fillna(0)
+    purchases['value'] = purchases.apply(_purchase_value_from_row, axis=1).fillna(0)
     purchase_features = purchases.groupby('customer_id').agg(
         total_purchase_value=('value', 'sum'),
         number_of_purchases=(event_name_col, 'size'),

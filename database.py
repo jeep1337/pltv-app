@@ -186,6 +186,37 @@ class Database:
         Incrementally and atomically updates a customer's features based on a single event
         using a single UPSERT query. This is far more efficient than a full recalculation.
         """
+        def _calculate_purchase_value(evt):
+            # Prefer top-level value; otherwise derive from items
+            try:
+                direct_val = float(evt.get('value'))
+                return direct_val
+            except Exception:
+                pass
+
+            total = 0.0
+            items = evt.get('items')
+            if isinstance(items, list):
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    price = item.get('price')
+                    if price is None:
+                        price = item.get('item_price')
+                    if price is None:
+                        price = item.get('item_revenue')
+                    qty = item.get('quantity', 1)
+                    try:
+                        price_num = float(price)
+                    except Exception:
+                        price_num = 0.0
+                    try:
+                        qty_num = float(qty)
+                    except Exception:
+                        qty_num = 1.0
+                    total += price_num * qty_num
+            return total
+
         event_name = event.get('event_name') or event.get('event_type')
         if not event_name:
             return
@@ -215,7 +246,7 @@ class Database:
                     updated_at = CURRENT_TIMESTAMP;
             """
         elif event_name == 'purchase':
-            purchase_value = float(event.get('value', 0.0))
+            purchase_value = _calculate_purchase_value(event)
             params['purchase_value'] = purchase_value
             query = """
                 INSERT INTO customer_features (customer_id, number_of_purchases, total_purchase_value, days_since_last_purchase)
